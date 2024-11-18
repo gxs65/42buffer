@@ -17,7 +17,19 @@ void	ft_putchar(char c)
 	write(1, &c, 1);
 }
 
-int	ft_putstr(char *str)
+void	ft_putnchar(char c, int n)
+{
+	int	ind;
+
+	ind = 0;
+	while (ind < n)
+	{
+		ft_putchar(c);
+		ind++;
+	}
+}
+
+int		ft_putstr(char *str)
 {
 	int	count;
 

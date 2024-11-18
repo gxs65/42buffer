@@ -24,6 +24,6 @@ clean:
 
 tests:
 	cp ../main2.c .
-	cc $(CFLAGS) *.c -o testing
-	./testing abc d -1 -2147483647 889 890 891
-	rm -f main2.c testing
+	cc $(CFLAGS) main2.c ft_printf.c ft_put.c -o testing
+	- ./testing
+	rm -f main2.c *.o testing

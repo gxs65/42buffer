@@ -1,0 +1,156 @@
+/* FONDS */
+
+#rowSelectionJour {
+   background-color:#dddddd;
+}
+#rowEnregistrement {
+   background-color:#dddddd;
+}
+#rowCoups {
+   background-color: #eeeeee;
+   height:40px;
+}
+#rowRecords {
+   background-color: #eeeeee;
+   height:40px;
+}
+#rowButtons {
+   background-color: #eeeeee;
+}
+
+/* TEXTES INDICATIFS ET BOUTONS DE CHOIX */
+
+.dirButton {
+   background-color:white;
+}
+
+#tableLevelButtons td {
+   width:60px;
+}
+#tableRobotButtons td {
+   width:60px;
+}
+
+.levelButton {
+   background-color: #E0E0E0;
+}
+
+/* AFFICHAGE DE LA GRILLE ET DES MURS */
+
+#plateau {
+   border:3px solid black;
+   margin-top:15px;
+   margin-bottom:15px;
+}
+
+#plateau td {
+   text-align:center;
+}
+
+.casePlateau {
+   border:1px solid grey;
+   width:50px;
+   height:50px;
+}
+
+.murBas {
+   border-bottom:3px solid black; 
+}
+.murDroite {
+   border-right:3px solid black; 
+}
+.murHaut {
+   border-top:3px solid black; 
+}
+.murGauche {
+   border-left:3px solid black; 
+}
+
+#case135,#case136,#case119,#case120 {
+    background-color: black;
+}
+
+/* LES BOUTONS POUR SÉLECTIONNER UN ROBOT */
+
+#button0 {
+   background-color:blue;
+}
+#button1 {
+   background-color:red;
+}
+#button2 {
+   background-color:green;
+}
+#button3 {
+   background-color:yellow;
+}
+
+.tableauInvisible {
+   border-collapse:collapse;
+}
+
+/* LES INDICATEURS DE DIRECTION POTENTIELLE*/
+
+.indicDir {
+   opacity:0.3;
+}
+
+.indicDirHaut {
+   height: 40px;
+   width: 10px;
+   margin-top:3px;
+   margin-bottom:3px;
+   margin-left:18px;
+   margin-right:18px;
+}
+.indicDirBas {
+   height: 40px;
+   width: 10px;
+   margin-top:3px;
+   margin-bottom:3px;
+   margin-left:18px;
+   margin-right:18px;
+}
+.indicDirGauche {
+   height: 10px;
+   width: 40px;
+   margin-top:18px;
+   margin-bottom:18px;
+   margin-left:3px;
+   margin-right:3px;
+}
+.indicDirDroite {
+   height: 10px;
+   width: 40px;
+   margin-top:18px;
+   margin-bottom:18px;
+   margin-left:3px;
+   margin-right:3px;
+}
+
+.indicDir0 {
+   background-color:blue;
+}
+.indicDir1 {
+   background-color:red;
+}
+.indicDir2 {
+   background-color:green;
+}
+.indicDir3 {
+   background-color:yellow;
+}
+
+/* LES IMAGES DE TRUCS CLIQUABLES DANS LE PLATEAU */
+
+.imgRobot {
+   cursor:pointer;
+}
+.imgrobot:hover {
+   opacity:0.5;
+}
+/* ancienne solution d'indicateurs de déplacement potentiel
+.imgDir {
+   cursor:pointer;
+}
+*/

@@ -58,6 +58,7 @@ void	new_image(void *mlx, t_img *img, int width, int height);
 void	change_pixel(t_img *img, int x, int y, int color);
 void	draw_circle(t_img *img, t_point *center, double radius, int color);
 void	draw_julia(t_img *img, t_point *c, double threshold);
+void	draw_mandelbrot(t_img *img, double threshold);
 
 // Geometry
 double	dist(t_point *pa, t_point *pb);

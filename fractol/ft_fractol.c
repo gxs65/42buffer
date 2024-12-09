@@ -2,7 +2,6 @@
 
 int	main(int ac, char **av)
 {
-	
 	void	*mlx;
 	void	*mlx_win;
 	t_img	img1;
@@ -15,14 +14,20 @@ int	main(int ac, char **av)
 	mlx = mlx_init();
 	mlx_win = mlx_new_window(mlx, WIN_WIDTH, WIN_HEIGHT, "Fractol");
 
+	//new_image(mlx, &img1, 20, 20);
 	new_image(mlx, &img1, WIN_WIDTH, WIN_HEIGHT);
-	c.x = ((double)atoi(av[1])) / 100;
-	c.y = ((double)atoi(av[2])) / 100;
+	if (ac > 2)
+	{
+		c.x = ((double)atoi(av[1])) / 100;
+		c.y = ((double)atoi(av[2])) / 100;
+	}
 	if (ac > 3)
 		threshold = ((double)atoi(av[3])) / 100;
 	else
 		threshold = 2;
-	draw_julia(&img1, &c, threshold);
+	//draw_julia(&img1, &c, threshold);
+	draw_mandelbrot(&img1, threshold);
+	(void)c;
 	mlx_put_image_to_window(mlx, mlx_win, img1.img_ptr, 0, 0);
 
 	ft_printf(LOGS, "Initialized mlx, created window, launching loop\n");

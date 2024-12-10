@@ -6,7 +6,9 @@ PRINTFBASENAMES = 	ft_printf.c					ft_printf_specnbr.c		ft_printf_utils.c \
 PRINTFSOURCES = $(addprefix $(PRINTFDIR), $(PRINTFBASENAMES))
 PRINTFOBJECTS = $(PRINTFSOURCES:.c=.o)
 
-SOURCES = ft_fractol.c ft_complex_ops.c ft_fractol_utils.c ft_mlx_drawings_base.c ft_mlx_drawings_fractal.c
+SOURCES =	ft_fractol.c			ft_mlx_images.c			ft_fractal_complex_ops.c \
+			ft_mlx_events.c			ft_fractal_drawing.c	ft_fractol_utils.c \
+			ft_ops_rlist.c
 OBJECTS = $(SOURCES:.c=.o)
 
 NAME = fractol
@@ -15,10 +17,10 @@ CFLAGS = -Wall -Wextra -Werror
 all: $(NAME)
 
 $(NAME): $(OBJECTS) $(PRINTFOBJECTS)
-	cc $(CFLAGS) -I. $(OBJECTS) $(PRINTFOBJECTS) -Lmlx -lmlx -lXext -lX11 -lm -lz -o $(NAME)
+	cc $(CFLAGS) -I. $(OBJECTS) $(PRINTFOBJECTS) -Lmlx -lmlx -lXext -lX11 -lm -lz -O3 -o $(NAME)
 
 %.o: %.c
-	cc $(CFLAGS) -Imlx -c $< -o $@
+	cc $(CFLAGS) -Imlx -c $< -O3 -o $@
 
 re: fclean all
 

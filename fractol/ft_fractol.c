@@ -1,48 +1,49 @@
 #include "ft_fractol.h"
 
+int	handle_loop(t_mlxdata *data)
+{
+	(void)data;
+	return (0);
+}
+
+void	draw(t_mlxdata *data)
+{
+	draw_mandelbrot3(data->img);
+	display_changed_image(data, data->img);
+}
+
 int	main(int ac, char **av)
 {
-	void	*mlx;
-	void	*mlx_win;
-	t_img	img1;
-	t_point	c;
-	double	threshold;
+	t_mlxdata	data;
+	t_img		img;
 
-	if (ac < 1)
-		return (1);
+	data.mlx_ptr = mlx_init();
+	data.win_ptr = mlx_new_window(data.mlx_ptr, WIN_WIDTH, WIN_HEIGHT, "Fractol");
 
-	mlx = mlx_init();
-	mlx_win = mlx_new_window(mlx, WIN_WIDTH, WIN_HEIGHT, "Fractol");
-
-	//new_image(mlx, &img1, 20, 20);
-	new_image(mlx, &img1, WIN_WIDTH, WIN_HEIGHT);
-	if (ac > 2)
+	//new_image(data.mlx_ptr, &img, WIN_WIDTH, WIN_HEIGHT);
+	new_image(data.mlx_ptr, &img, WIN_WIDTH, WIN_HEIGHT);
+	img.ftype = 1;// TODO : update to allow Julia sets
+	if (img.ftype == 0)
 	{
-		c.x = ((double)atoi(av[1])) / 100;
-		c.y = ((double)atoi(av[2])) / 100;
+		img.c.x = ((double)atoi(av[1])) / 100;
+		img.c.y = ((double)atoi(av[2])) / 100;
 	}
-	if (ac > 3)
-		threshold = ((double)atoi(av[3])) / 100;
+	if (ac == -1) // TODO : update to allow threshold parameter
+	{
+		img.threshold_sq = ((double)atoi(av[3])) / 100;
+		img.threshold_sq = img.threshold_sq * img.threshold_sq;
+	}
 	else
-		threshold = 2;
-	//draw_julia(&img1, &c, threshold);
-	draw_mandelbrot(&img1, threshold);
-	(void)c;
-	mlx_put_image_to_window(mlx, mlx_win, img1.img_ptr, 0, 0);
+		img.threshold_sq = 2 * 2;
 
-	ft_printf(LOGS, "Initialized mlx, created window, launching loop\n");
-	mlx_loop(mlx);
-	
+	data.img = &img;
+	img.data = &data;
+	mlx_loop_hook(data.mlx_ptr, &handle_loop, &data);
+	mlx_key_hook(data.win_ptr, &handle_keyrelease, &data);
+	mlx_mouse_hook(data.win_ptr, &handle_mouse, &data);
+	mlx_hook(data.win_ptr, 17, 0, &handle_destroy, &data);
 
-	/*
-	// TESTS FOR FUNCTION TIME TO DIVERGE
-	(void)ac;
-	(void)av;
-	int		time;
-	t_point	p;
-
-	p.x = 1;
-	p.y = 0.2;
-	time = time_to_diverge(&p, -0.75, 5);
-	*/
+	draw(&data);
+	mlx_loop(data.mlx_ptr);
+    mlx_destroy_display(data.mlx_ptr);
 }

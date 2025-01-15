@@ -1,0 +1,201 @@
+[PARSE2] Beginning tree build
+[PARSE2] Found 1 tokens in line
+[PARSE2] On node from 0 'ls' to 0 'ls'
+	Beginning meta-character search
+	Unable to find logical meta-character
+	Unable to find pipe
+	Unable to find parentheses
+[PARSE2] 	Reading redir tokens of leaf node
+         	Counted 0 redir, 1 cmd tokens
+	-> is a LEAF node, nb_cmd_tokens = 1
+##### COMMAND TREE PARSE2 #####
+leaf : redir { }; cmd { ls }
+##### ------------------- #####
+[PARSE3] Beginning parse3 = 		a) shellvar exp, b) resplit, c) pathname exp, d) quote removal
+[PARSE3] a) Shellvar expansion on token ls
+         	final state of token index 0 : ls
+[PARSE3] b-c-d) recurr, node type 5
+         	b) resplit command words
+         	Found 1 words after resplit
+         		Added word : ls
+         	c) pathname exp command words
+         	Found 1 words after pathname expansion
+         		Pathname expansion on word ls
+         	d) quote removal command words
+         		word 0 : ls
+         		-> ls
+         	b) resplit redir words
+         	Found 0 redir words after resplit
+         	c) pathname exp redir words
+         	Found 0 words after pathname expansion
+         	d) quote removal redir words
+##### COMMAND TREE PARSE3 #####
+leaf : 0*redir { } 1*cmd { ls }
+##### ------------------- #####
+[EXEC1 - MAIN] node type 5 at 25c73090 - beginning execution
+[EXEC1 - MAIN] node type 5 at 25c73090 - applying redirections
+[EXEC1 - MAIN] node type 5 at 25c73090 - successfully forked process for leaf
+[EXEC1 - MAIN] node type 5 at 25c73090 - end of wait on process for leaf
+[PARSE2] Beginning tree build
+[PARSE2] Found 1 tokens in line
+[PARSE2] On node from 0 'ls' to 0 'ls'
+	Beginning meta-character search
+	Unable to find logical meta-character
+	Unable to find pipe
+	Unable to find parentheses
+[PARSE2] 	Reading redir tokens of leaf node
+         	Counted 0 redir, 1 cmd tokens
+	-> is a LEAF node, nb_cmd_tokens = 1
+##### COMMAND TREE PARSE2 #####
+leaf : redir { }; cmd { ls }
+##### ------------------- #####
+[PARSE3] Beginning parse3 = 		a) shellvar exp, b) resplit, c) pathname exp, d) quote removal
+[PARSE3] a) Shellvar expansion on token ls
+         	final state of token index 0 : ls
+[PARSE3] b-c-d) recurr, node type 5
+         	b) resplit command words
+         	Found 1 words after resplit
+         		Added word : ls
+         	c) pathname exp command words
+         	Found 1 words after pathname expansion
+         		Pathname expansion on word ls
+         	d) quote removal command words
+         		word 0 : ls
+         		-> ls
+         	b) resplit redir words
+         	Found 0 redir words after resplit
+         	c) pathname exp redir words
+         	Found 0 words after pathname expansion
+         	d) quote removal redir words
+##### COMMAND TREE PARSE3 #####
+leaf : 0*redir { } 1*cmd { ls }
+##### ------------------- #####
+[EXEC1 - MAIN] node type 5 at 25c743f0 - beginning execution
+[EXEC1 - MAIN] node type 5 at 25c743f0 - applying redirections
+[EXEC1 - MAIN] node type 5 at 25c743f0 - successfully forked process for leaf
+[EXEC1 - MAIN] node type 5 at 25c743f0 - end of wait on process for leaf
+[PARSE2] Beginning tree build
+[PARSE2] Found 1 tokens in line
+[PARSE2] On node from 0 'ls' to 0 'ls'
+	Beginning meta-character search
+	Unable to find logical meta-character
+	Unable to find pipe
+	Unable to find parentheses
+[PARSE2] 	Reading redir tokens of leaf node
+         	Counted 0 redir, 1 cmd tokens
+	-> is a LEAF node, nb_cmd_tokens = 1
+##### COMMAND TREE PARSE2 #####
+leaf : redir { }; cmd { ls }
+##### ------------------- #####
+[PARSE3] Beginning parse3 = 		a) shellvar exp, b) resplit, c) pathname exp, d) quote removal
+[PARSE3] a) Shellvar expansion on token ls
+         	final state of token index 0 : ls
+[PARSE3] b-c-d) recurr, node type 5
+         	b) resplit command words
+         	Found 1 words after resplit
+         		Added word : ls
+         	c) pathname exp command words
+         	Found 1 words after pathname expansion
+         		Pathname expansion on word ls
+         	d) quote removal command words
+         		word 0 : ls
+         		-> ls
+         	b) resplit redir words
+         	Found 0 redir words after resplit
+         	c) pathname exp redir words
+         	Found 0 words after pathname expansion
+         	d) quote removal redir words
+##### COMMAND TREE PARSE3 #####
+leaf : 0*redir { } 1*cmd { ls }
+##### ------------------- #####
+[EXEC1 - MAIN] node type 5 at 25c747d0 - beginning execution
+[EXEC1 - MAIN] node type 5 at 25c747d0 - applying redirections
+[EXEC1 - MAIN] node type 5 at 25c747d0 - successfully forked process for leaf
+[EXEC1 - MAIN] node type 5 at 25c747d0 - end of wait on process for leaf
+[PARSE2] Beginning tree build
+[PARSE2] Found 4 tokens in line
+[PARSE2] On node from 0 'ls' to 3 'main'
+	Beginning meta-character search
+	Unable to find logical meta-character
+	Found connector '|' at 1
+[PARSE2] On node from 0 'ls' to 0 'ls'
+	Beginning meta-character search
+	Unable to find logical meta-character
+	Unable to find pipe
+	Unable to find parentheses
+[PARSE2] 	Reading redir tokens of leaf node
+         	Counted 0 redir, 1 cmd tokens
+	-> is a LEAF node, nb_cmd_tokens = 1
+[PARSE2] On node from 2 'grep' to 3 'main'
+	Beginning meta-character search
+	Unable to find logical meta-character
+	Unable to find pipe
+	Unable to find parentheses
+[PARSE2] 	Reading redir tokens of leaf node
+         	Counted 0 redir, 2 cmd tokens
+	-> is a LEAF node, nb_cmd_tokens = 2
+##### COMMAND TREE PARSE2 #####
+pipe : 
+	leaf : redir { }; cmd { ls }
+	leaf : redir { }; cmd { grep main }
+##### ------------------- #####
+[PARSE3] Beginning parse3 = 		a) shellvar exp, b) resplit, c) pathname exp, d) quote removal
+[PARSE3] a) Shellvar expansion on token ls
+         	final state of token index 0 : ls
+[PARSE3] a) Shellvar expansion on token |
+[PARSE3] a) Shellvar expansion on token grep
+         	final state of token index 2 : grep
+[PARSE3] a) Shellvar expansion on token main
+         	final state of token index 3 : main
+[PARSE3] b-c-d) recurr, node type 6
+[PARSE3] b-c-d) recurr, node type 5
+         	b) resplit command words
+         	Found 1 words after resplit
+         		Added word : ls
+         	c) pathname exp command words
+         	Found 1 words after pathname expansion
+         		Pathname expansion on word ls
+         	d) quote removal command words
+         		word 0 : ls
+         		-> ls
+         	b) resplit redir words
+         	Found 0 redir words after resplit
+         	c) pathname exp redir words
+         	Found 0 words after pathname expansion
+         	d) quote removal redir words
+[PARSE3] b-c-d) recurr, node type 5
+         	b) resplit command words
+         	Found 2 words after resplit
+         		Added word : grep
+         		Added word : main
+         	c) pathname exp command words
+         	Found 2 words after pathname expansion
+         		Pathname expansion on word grep
+         		Pathname expansion on word main
+         	d) quote removal command words
+         		word 0 : grep
+         		-> grep
+         		word 1 : main
+         		-> main
+         	b) resplit redir words
+         	Found 0 redir words after resplit
+         	c) pathname exp redir words
+         	Found 0 words after pathname expansion
+         	d) quote removal redir words
+##### COMMAND TREE PARSE3 #####
+pipe :  
+	leaf : 0*redir { } 1*cmd { ls }
+	leaf : 0*redir { } 2*cmd { grep main }
+##### ------------------- #####
+[EXEC1 - MAIN] node type 6 at 25c74c60 - beginning execution
+[EXEC1 - MAIN] node type 6 at 25c74c60 - created pipe, assigned fds of child_1 at 25c74ce0 and child_2 at 25c74d60, now forking
+[EXEC1 - MAIN] node type 6 at[ EXEC1 - 2M5AcI7N4]c 6n0o d-e  stuycpcee ssf6ul layt  forked proces2s5 cf7o4rc 6p0i p-e  scuhcicleds_s1f
+ully forked process for[ EpXiEpCe1  c-h [iMElAXdIE_NC1]1
+  n-o dMeA ItNy]p en ode6  tayt[p EeX EC12 55-c  7aM4tAc I6N]2 5nco7d4ed 06t 0y- p -es  ubce6cge isanstnf iun2g5l cle7yx4 ecfc6ou0rt ki-eo dns 
+up[crEcoXecEseCss1fs u -lf loMyrA  IfpNoi]rp kene odcd hepi rltodyc_pe2es
+ s5  faotr  p2i5pce7 4cdh6i0l d-_ 2a
+pplying redir[eEcXtEiCo1n s-
+ MAIN] node type 5 at 25c74d[6E0X E-C 1b e-g iMnAnIiNn]g  neoxdeec uttyipoen 
+[EX5EC 1a t-  M2A5IcN7]4 dn6o0d e-  tsyupcec e5s saftu ll2y5 cf7o4rdk6e0d  -p raopcpelsysi nfgo rr eldeiarfe
+ctions
+[EXEC1 - MAIN] node type 5 at 25c74d60 - successfully forked process for leaf

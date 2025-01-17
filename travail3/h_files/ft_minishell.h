@@ -6,7 +6,7 @@
 /*   By: abedin <abedin@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/01/06 15:19:39 by ilevy             #+#    #+#             */
-/*   Updated: 2025/01/15 03:18:59 by abedin           ###   ########.fr       */
+/*   Updated: 2025/01/17 04:30:54 by abedin           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -26,33 +26,53 @@
 # include <sys/stat.h>
 # include "../libft/h_files/libft.h"
 
+// Macros identifying the types of tokens in a command line
+// (and the type of nodes in the command tree)
 # define INPUT		1 // <
 # define HEREDOC	2 // <<
 # define TRUNC		3 // >
 # define APPEND		4 // >>
-# define CMD		5 // string containing command + Arg + option
+# define CMD		5 // command words
 # define PIPE		6 // |
 # define AND		7 // &&
 # define OR			8 // ||
 # define OPEN		9 // (
 # define CLOSE		10 // )
 
-# define MALLOC_ERROR 4242
-# define CMD_ERROR 8484
+// Macros identifying errors that make minishell reprompt/exit
+# define KILL_MALLOC_ERROR 			128
+# define STOP_VAR_ASSIGN 			129
+# define STOP_VAR_ASSIGN_NOTALONE	130
 
+// Maximal length of a path to a certain file
+// (not certain wether linux kernel really limits path length,
+//  but glibc seems to work with this maximal length)
+# define PATH_MAX_LEN 4095
+// Maximal length of file name
+# define FILENAME_MAX_LEN 255
+
+// Macros controlling the display of logs (given as fds to <ft_printf>) :
+// 		LOGS to 2 for simple logs, LOGSV to 2 for verbose logs
 # define LOGS 2
 # define LOGSV 2
 
+// Structure binding the two arrays that describe the command line tokens :
+// 		- <name> = the token strings as found in the command line
+// 		- <type> = the token type, among the type macros from 1 to 10
 typedef struct s_token
 {
 	char	**name;
 	int		*type;
 }				t_token;
 
+// A node in the command tree, with
+// 		- a type, among the type macros CMD/PIPE/OPEN/AND/OR
+// 		- reference to the two potential children nodes
+// 		- cmd and redir tokens (+ words) string arrays
+// 		- input/output file descriptors
 typedef struct s_node 
 {
 	int				type;
-	struct s_node	*back;
 	struct s_node	*child_1;
 	struct s_node 	*child_2;
 
@@ -70,24 +90,48 @@ typedef struct s_node
 	int				ind_end_token;
 
 	int				fd_in;
+	int				fd_in_orig;
 	int				fd_out;
+	int				fd_out_orig;
+	int				depth;
 }				t_node;
 
+// Elements of a linked list to store shell variables :
+// 		name, value, and a boolean for wether the variable belongs to env
+// 			(because it was there at initialization / it was exported)
+typedef	struct s_var
+{
+	char			*value;
+	char			*name;
+	int				is_in_env;
+	struct s_var	*next;
+}				t_var;
+
+// Main structure holding all general informations
+// 		- <tokens>, the result of the command line's tokenisation
+// 		- <root>, reference to the root node of the command tree
+// 		- <path_dirs>, string array containing the paths of dirs for binaries
+// 		- <env>, reference to the first element of a linked list
+// 				 of shell variables of type <t_var>
 typedef struct s_data
 {
-	char	**env;
-
 	t_token	*tokens;
 	int		nb_tokens;
-
-	int		filefd_in;
-	int		filefd_out;
 	
 	t_node	*root;
 	t_node	*current;
 
 	char	**path_dirs;
+	t_var	*env;
 }				t_data;
+
+// INIT1
+int		ft_init1_det_path(t_data *data);
+int		ft_init1_retrieve_env(t_data *data, char **envp);
+int		ft_strcmp(char *s1, char *s2);
+t_var	*ft_var_new(char *name, char *value, int is_in_env);
+t_var	*ft_var_push_back(t_var *start, t_var *new_var);
+int		ft_exec4_var_assign(t_data *data); // PAS LA VERSION DEFINITIVE
 
 // PARSE1
 int		ft_same_char(char first, char second);
@@ -117,7 +161,6 @@ int		ft_is_redir_token(int token_type);
 t_node	*ft_node_new(void);
 char	*ft_strncat(char *dest, const char *src, int n);
 char	*ft_strcat(char *dest, const char *src);
-
 
 // PARSE3
 void	ft_parse3_display_cmd_tree(t_data *data, t_node *current, int depth);
@@ -157,9 +200,13 @@ int		ft_parseX_store_pathname(t_data *data, char *word, char **store, int *index
 
 // EXEC
 void	ft_exec3_execcmd(t_data *data, t_node *current);
-int		ft_exec1_apply_redirections(t_data *data, t_node *current);
-int		ft_exec1_exectree_recurr(t_data *data, t_node *current);
+int		ft_exec2_apply_redirections(t_data *data, t_node *current);
+void	ft_exec2_close_redirections(t_data *data, t_node *current);
+int		ft_exec1_exectree_recurr(t_data *data, t_node *current, int depth);
 
-
+int		ft_exec1_exec_node_pipe(t_data *data, t_node *current, int depth);
+int		ft_exec1_exec_node_par(t_data *data, t_node *current, int depth);
+int		ft_exec1_exec_node_logical(t_data *data, t_node *current, int depth);
+int		ft_exec1_exec_node_leaf(t_data *data, t_node *current, int depth);
 
 #endif

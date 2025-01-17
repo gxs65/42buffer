@@ -102,6 +102,7 @@ char	*ft_strncat(char *dest, const char *src, int n)
 	return (dest);
 }
 
+/* DEFINED IN LIBFT PRINTF
 // Copies all <src> to the end of <dest>, no check of length
 char	*ft_strcat(char *dest, const char *src)
 {
@@ -120,3 +121,4 @@ char	*ft_strcat(char *dest, const char *src)
 	dest[ind_dest + ind_src] = '\0';
 	return (dest);
 }
+*/

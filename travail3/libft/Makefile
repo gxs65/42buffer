@@ -42,8 +42,14 @@ FTLST:= ft_lstadd_back_bonus.c ft_lstadd_front_bonus.c ft_lstiter_bonus.c\
 FTPUT_DIR:= ft_put/
 FTPUT:= ft_putchar_fd.c ft_putendl_fd.c ft_putnbr_fd.c ft_putstr_fd.c
 
+# ft_printf somewhat different from the rest of libft, because from abedin
+# to have a more async-safe version
 FTPRINTF_DIR:= ft_printf/
-FTPRINTF:= ft_printbasic.c ft_printf.c ft_printhexa.c ft_printpointer.c ft_printunsigned.c
+FTPRINTF:=  ft_printf_main.c		ft_printf_main_count.c		ft_put_in.c \
+			ft_printf_utils1.c		ft_printf_utils2.c			ft_printf_readspecs.c \
+			ft_printf_specstr.c		ft_printf_specstr_count.c \
+			ft_printf_specother.c	ft_printf_specother_count.c \
+			ft_printf_specnbr.c		ft_printf_specnbr_count.c	ft_printf_specnbr_extras.c
 
 FTGETNEXT_DIR:= ft_getnext/
 FTGETNEXT:= ft_get_next_line.c ft_get_next_line_utils.c

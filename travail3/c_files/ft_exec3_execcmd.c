@@ -21,27 +21,36 @@ int	ft_exec3_find_execfile(t_data *data, char *basename, char *filename)
 	return (1);
 }
 
+// Function called by child process created when a leaf node forks,
+// 		so the child process is being waited by its leaf node parent,
+// 			and its sole purpose is to transmogrify into another program
+// 			thanks to <execve>
+// To set up the transmogrification :
+// 		1. determine the executable file for the command
+// 			(if none is found, exits with adequate code)
+// 		2. change the process' stdin and stdout with <dup>
+// 			according to the node's <fdin> and <fdout>
+// 		3. call execve and exit with adequate code if it fails
 void	ft_exec3_execcmd(t_data *data, t_node *current)
 {
-	char	exec_file[200]; // TODO : trouver une methode plus elegante de connaitre le nom de l'executable,
-							// peut-etre que <ft_exec3_find_execfile> peut renvoyer un pointeur vers une string
+	char	exec_file[PATH_MAX_LEN];
 
 	if (ft_exec3_find_execfile(data, current->cmd_words[0], exec_file))
 	{
-		//ft_printf(LOGSV, "[EXEC1 - EXECUTOR] node type %d at %p - no executable file found for cmd %s\n", current->type, current, current->cmd_words[0]);
+		ft_printf(LOGSV, "[EXEC3] node type %d at %p - no execfile cmd %s\n",
+			current->type, current, current->cmd_words[0]);
 		exit(1);
 	}
 	free(current->cmd_words[0]);
 	current->cmd_words[0] = ft_strdup(exec_file);
 	if (!(current->cmd_words[0]))
 		exit(1);
-	//ft_printf(LOGSV, "[EXEC1 - EXECUTOR] node type %d at %p - found executable named %s\n", current->type, current, exec_file);
-
+	ft_printf(LOGSV, "[EXEC3] node type %d at %p - found execfile named %s\n",
+		current->type, current, exec_file);
 	if (current->fd_in != 0)
 		dup2(current->fd_in, 0);
 	if (current->fd_out != 1)
 		dup2(current->fd_out, 1);
-
 	if (execve(current->cmd_words[0], current->cmd_words, NULL) == -1)
 		exit(1);
 }

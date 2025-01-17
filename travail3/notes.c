@@ -1,4 +1,4 @@
-/* TODO
+/* Notes generales
 
 === NOTES SUR VIDEO : https://www.youtube.com/watch?v=oIFRiwFRSRY&list=PL7_TuD9ZDMhg5uLHLyd8em13XBKfjzCzR&index=4
 - attention aux fonctions non-async safe dans les signal handler !
@@ -16,8 +16,7 @@
 	\ syntaxe concrète = ce qui est entré par l'utilisateur : "b += 12"
 	\ syntaxe abstraite = comment on représente la vraie requête : "b = b + 12"
 
-=== A FAIRE
-+ lire le shell command language manuel : https://pubs.opengroup.org/onlinepubs/009604499/utilities/xcu_chap02.html
+=== PROBLEMES D'IMPLEMENTATION
 + reflechir a la pertinence de la priorite, et trouver une manière de différencier :
 	`cat in | (wc -l && cat)`	-> wc mange l'output du premier cat, donc le 2nd cat a un input defini vide et ne renvoie rien
 	`(cat in | wc -l) && cat`	-> le second cat n'a pas d'input defini autre que stdin, donc il s'execute sur stdin
@@ -40,6 +39,9 @@
 + se resoudre a une solution sur le probleme de la representation des tokens
 		appartenant a la commande d'un noeud leaf / a la redirection d'un noeud leaf ou parenthesis
 	=> solution lourde en malloc avec un tableau intermediaire d'indices de tokens, et un tableau final de chaines de caractere
+
+=== RAFFINEMENTS A EFFECTUER
++ lire le shell command language manuel : https://pubs.opengroup.org/onlinepubs/009604499/utilities/xcu_chap02.html
 + gerer le cas de guillemets a l'interieur du token ex. <<echo"$var"'$var'>>
 - gerer la segfault dans le cas de ligne vide
 - reflechir a shell expansion dans le heredoc
@@ -55,8 +57,19 @@
 - raccorder le split du path avant de process une nouvelle ligne de commande au initialize_data general
 	/!\ on doit faire une requete pour la variable d'environnement PATH
 	/!\ si elle n'existe pas, on ne cherchera les executables que dans le repertoire courant
+- verifier et rendre une erreur si on trouve 2 fois le meme fichier dans les redirections, dans des sens opposes
+- passer la norminette dans la libft : corrections a faire dans le ft_printf modifie
+- implementer le fait que apparemment quand la commande exit est dans un pipe, elle ne s'execute pas...
+- verifier comment gerer path_max_len
+- rectifier l'erreur de norme dans le header de get_next_line (acd le ifndef supplementaire ?)
+- se renseigner sur la question de la gestion du mode interactif ?
+	-> utiliser <isatty> pour se proteger contre les lancements de minishell avec une redirection de l'input !
+- interagir avec l'environnement : modifier la var d'environnement SHELL, PWD, OLDPWD
+	(quand on lance bash dans zsh, utilise `cd` puis `exit`, zsh n'a pas change de dossier :
+		donc la variable d'environnement PWD d'est pas un proxy, det reellement ou on est pour par ex `ls` qui prendra envp en arg a l'execve)
+- avoir un prompt qui donne aussi le cwd (demande un malloc de plus)
 
-- DOCUMENTATION SUR LES FONCTIONS DU SUJET
+=== DOCUMENTATION SUR LES FONCTIONS DU SUJET
 - commande "bash" : option "--posix" pour la version minimale conforme a POSIX
 	\ separe une chaine en "tokens", puis traite (1) les pipes (2) les redirections (3) les commandes
 		/!\ ne pas oublier qu'une ligne peut commencer par une redirection plutot qu'une commande
@@ -95,7 +108,7 @@
 				(soit elle ne trouve rien et laisse le token en l'etat, soit elle trouve des trucs et les renvoie)
 		sinon on le split sur les espaces de facon classique
 
-= CAS SPECIFIQUES DE BASH
+=== CAS PARTICULIERS TESTES AVEC BASH
 - multiples redirections : `cat in > out1 > out2`, `cat > out < in1 < in2`, `cat > out < in*`
 	-> comportement constate : bash n'applique que la derniere redirection, mais attention :
 		~ si l'expansion du caractere '*' donne plusieurs noms de fichiers, bash emet une erreur "ambiguous redirection"
@@ -124,7 +137,36 @@
 		~ `ls | (wc -l && grep lorem)` : wc mange tout l'output recu de ls, donc grep s'execute mais echoue (aucun input)
 		~ `ls | (wc -x || grep lorem)` : wc echoue donc ne mange rien de l'output, grep peut s'executer et trouver des lignes
 
-= PLAN PROVISOIRE
+=== COMPREHENSION DE CWD ET CD
+- quand on lance bash dans zsh, utilise `cd ..` puis `exit`, zsh n'a pas change de dossier :
+	il semble que bash a son propre CWD, herite de zsh initialement mais qu'il modifie sans impacter zsh
+		-> idee initiale : la substance de CWD est le contenu de la variable d'environnement "PWD",
+			qu'on passe aux commandes qu'on execute avec <execve> pour qu'elles en heritent
+		et il n'y a aucune autre representation du CWD d'un process
+- mais battu en breche par l'exemple de modifier la var d'environnement CWD directement dans bash, ex `PWD="/"` :
+	(le prompt de bash sera modifie car apparemment il utilise la valeur de PWD) mais appeler ensuite `pwd` ou `ls` montre qu'on a pas bouge !
+		-> en realite il existe une autre representation du CWD d'un process : dans les systemes UNIX, dans le dossier "/proc/",
+			il y a un dossier pour chaque process (identifie par son PID) contenant les infos sur la representation de ce process dans le kernel,
+				notamment "cwd" = un lien symbolique vers le current working directory de ce process
+		(en fait les proc files d'un process contiennent toutes les infos issues de l'initialisation et des system calls dans un process :
+			command line arguments argv, environnement envp, open file descriptors, memoire utilisee...)
+- donc meilleure interpretation de l'exemple initial : dans le process zsh, on a envoye la commande `bash`,
+	donc zsh a forke et le process enfant a execve sur l'executable de bash (sachant que execve maintient le PID et le CWD) :
+		bash a donc son propre process avec ses infos dans "/proc/<bashPID>/",
+			et son propre CWD ("/proc/<bashPID>/cwd") initialement herite de zsh mais qu'il peut modifier sans impacter zsh
+- dans cet heritage de CWD par les process forkes, la variable d'environnement "PWD" ne joue aucun role :
+	les variables d'environnement appartiennent au "User space", alors que la duplication de process par fork
+	manipule des structures de donnees decrivant le "process state" dans le "kernel space"
+		(d'ailleurs le lien "/proc/<bashPID>/cwd" ne joue pas de role non plus, il est lui aussi un relais et pas la representation ultime du CWD)
+- consequence pour Minishell : la variable d'environnement "PWD" n'est qu'une "user-space convenience" pour representer le vrai CWD,
+		et donc il faut s'assurer manuellement de sa bonne valeur si une action devait la modifier/initialiser :
+	\ modification, par un `cd` : notre version builtin de cd, apres avoir utilise <chdir>,
+		doit modifier la variable "PWD" (sans doute avec <getcwd>)
+	\ initialisation, par un fork (ou juste le lancement du programme par fork+execve) :
+		fork copie et donc conserve les variables d'environnement, donc rien a faire si la variable "PWD" du process qui a forke avait la bonne valeur,
+			(mais au cas ou on peut toujours verifier avec <getcwd>)
+
+=== PLAN PROVISOIRE
 - liste des meta-caracteres a gerer : | || && * $ < > << >> ()
 - etapes de parsing a la reception d'une ligne non vide , par exemple `ls | (wc -l && grep 'lorem ipsum') > out` :
 	1. Split initial en tokens -> resultat : un tableau de strings
@@ -177,27 +219,57 @@
 		~ selon la valeur de retour, eventuellement recurrer sur child_2
 		~ renvoyer le exit_status de child_2
 
-- cas d'invalidite de la ligne de commande entree :
-	\ guillemet laisse ouvert
+=== LISTES
+- erreurs de syntaxe :
+	\ guillemets incoherents
 		-> check : durant l'etape Parsing1
-	\ parentheses non coherentes
+	\ parentheses incoherentes
 		-> check : entre l'etape Parsing1 et Parsing2
-	\ noeud leaf sans token commande (meme s'il y a des tokens de redirection)
+	\ redirection incoherente <=> meta-caractere de redir non suivi d'un mot
+		-> check : entre l'etape Parsing1 et Parsing2
+	\ noeud leaf sans command words (meme s'il y a des redir words)
 		-> check : apres l'etape Parsing3
 			/!\ pas le fonctionnement exact de bash, mais plutot logique
-	\ meta-caractere (ou fin de commande) apres caractere de redirection
-		-> check : entre l'etape Parsing1 et Parsing2
-	\ resultat d'expansion de redirection qui donne 0 ou >1 chaines de caractere post-split(' ')
+	\ ligne de commande contenant une assignation, mais avec plus d'un noeud / d'un mot
+		-> check : entre l'etape Parsing2 et Parsing3
+	\ path (de fichier redir / d'executable) trop long (> PATH_MAX_LEN)
+		-> check : entre l'etape Parsing1 et Parsing3
+	\ resultat de resplit sur un redir word qui donne 0 ou >1 chaines de caractere
+	  resultat de pathname expansion sur un redir word qui donne 0 ou >1 chaines de caractere
 		-> check : durant l'etape Parsing3
+	\ 2 fois le meme fichier dans les redirections, dans des sens opposes
+		-> check : apres l'etape Parsing3
+- erreurs de systeme de fichiers
+	\ pas d'executable trouve pour une commande
+		-> check : durant l'etape Exec3, avec des access
+	\ pas de fichier de redirection avec le nom donne
+		-> check : durant l'etape Exec2, avec des access
+- erreurs de system calls
+	\ sigaction			-> Init1 pendant mise en place des gestionnaires de signaux
+	\ malloc			-> (cf liste des variables allouees)
+	\ pipe				-> Exec1 sur noeud pipe
+	\ open				-> Exec2 fichiers de redirections, Exec0 heredoc
+	\ opendir			-> Parse3 pendant pathname expansion
+	\ fork				-> Exec1 sur noeud leaf, Exec1 sur noeud pipe
+	\ execve			-> Exec3 par definition
+	\ systems calls des builtins
+- variables LONG-TERME dont le contenu est alloue dynamiquement
+	\ <data.path_dirs>								de Init1 recuperation du path
+	\ <var>
+	  <var.value> + <var.name>						de Init1 recuperation de l'env, et Exec4 assignation de variables shell
+	\ <line>										de readline, remplace dans Parse3 expansion des variables shell
+	\ <data.tokens.name> + <data.tokens.type>		de Parse1 tokenisation
+	\ <node>										de Parse2 construction de l'arbre
+	\ <node.redir_tokens_inds>
+	  <node.cmd_tokens_inds>						de Parse2 construction de l'arbre
+	\ <node.redir_words>
+	  <node.cmd_words>								de Parse3 resplit, remplace dans Parse3 expansion des pathnames
+-  variables COURT-TERME dont le contenu est alloue dynamiquement
+	\ <execfile> (char *)							de Exec3 recuperation du nom de fichier executable
+	\ <envp> (char **)								de Exec3 reconstitution de l'enc pour le passer a execve
 
-
-*/
-
-
-
-/*
-
-=== MODIFICATIONS A TRANSMETTRE
+=== COMMUNICATION ENTRE VERSIONS
+- modifications par rapport aux fichiers precedents
 	\ tous les fichiers de la forme ft_parse[23] ou ft_exec[123]
 	\ 2 macros dans le header : LOGS et LOGSV
 	\ 1 include dans le header : <sys/stat.h>
@@ -205,17 +277,76 @@
 	\ chaine <readline> de main pour ajouter une couleur au prompt
 	\ ajout des fonctions de parse et d'execution dans les tests du main
 	\ remplacement de la fonction <isspace> qui etait dans <ft_utils_1>
+	\ remplacement de ft_printf classique par une version qui appelle <write> 1 seule fois
+		/!\ apres avoir mis en conformite avec la norminette
+- aspects de bash non geres pour le moment
+	\ pathname expansion qui renvoie des mots (noms de fichier) avec des guillemets :
+		ces guillemets seront enleves pendant quote removal, alors qu'ils devraient rester
+	\ shellvar expansion qui renvoie des mots  avec des guillemets :
+		ces guillemets seront enleves pendant quote removal, alors qu'ils devraient rester
+			(ex `var="a 'b c'"` puis `echo $var` donne `a b c` mais doit donner `a 'b c'`)
+	\ pathname expansion qui fait du vrai pattern matching plutot que seulement expand '*'
+	\ tokenisation qui prend en compte le fait que les guillemets ne sont pas des delimiteurs de tokens
+	\ l'expansion n'est veritablement faite que pour un noeud pendant son passage en exec,
+		de sorte que la commande `var=5 ; echo $var` affiche bien 5
+			(<var> est bien definie au moment de passer a la commande echo)
 
-=== NON GERE POUR LE MOMENT
-- pathname expansion qui renvoie des mots (noms de fichier) avec des guillemets :
-	ces guillemets seront enleves pendant quote removal, alors qu'ils devraient rester
-- shellvar expansion qui renvoie des mots  avec des guillemets :
-	ces guillemets seront enleves pendant quote removal, alors qu'ils devraient rester
-		(ex `var="a 'b c'"` puis `echo $var` donne `a b c` mais doit donner `a 'b c'`)
-- pathname expansion qui fait du vrai pattern matching plutot que seulement expand '*'
-- tokenisation qui prend en compte le fait que les guillemets ne sont pas des delimiteurs de tokens
+*/
 
-=== EN COURS
-- fonction <store_redir_words> dans resplit de redir
+/* Plan des taches a realiser
+
+- définir les cas d'erreur de syntaxe de la commande,
+	leur assigner une valeur, un message d'erreur,
+		et faire en sorte qu'ils n'interrompent pas Minishell mais produisent un nouveau prompt
+- définir les cas d'erreur d'appels système dans parsing+exec (malloc/open/execve),
+	leur assigner une valeur, un message d'erreur,
+		et faire en sorte qu'ils interrompent toute l'exécution de Minishell
+- gestion de la mémoire dans parsing+exec
+	\ libération de toutes les variables allouées à la fin de l'exécution
+	\ en cas d'erreur d'appel système / de syntaxe de la commande,
+		libérer ce qui a été alloué jusqu'ici
+
+- redefinition du path avant de commencer l'execution d'une ligne
+	(au cas ou la variable d'environnement aurait change / ete unset)
+- recherche d'un fichier exécutable selon le premier mot de la commande
+	\ premier mot sans "/" : membre des BUILTIN, sinon dans le PATH
+	\ premier mot avec "/" en premier caractère : chemin absolu
+	\ premier mot avec "/" à l'intérieur : chemin relatif
+- recherche d'un fichier de redirection
+	\ nom sans "/" : dans le répertoire courant
+	\ nom avec "/" en premier caractère : chemin absolu
+	\ nom avec "/" à l'intérieur : chemin relatif
+- pattern-matching des expansions de "*"
+	+ cas particuliers de "*" suivi de "/", et "./" suivi de "*"
+
+- gestion des signaux, avec une seule variable globale
+	\ que doivent faire exactement Ctrl+C et Ctrl+D ?
+	\ doit-on se contenter de la gestion par défaut des signaux par les programmes en cours d'exécution,
+		ou les kill (SIGKILL) en plus si on reçoit un Ctrl+C ?
+
+- conversion de l'environnement initial en une liste chainee
+	\ chaque élément de la liste chaînée à un bolléen indiquant s'il fait partie de l'env
+	\ ajout de variables sans export <=> ajout d'éléments à la liste chaînée
+	\ export et unset <=> modification du booléen dans la liste chaînée
+	\ fonction transformant la liste chaînée en un tableau de chaînes de caracteres,
+		pour pouvoir donner ce tableau en paramère à execve
+- détection des noeuds ou le premier mot contient un "=" :
+	elles définissent la valeur d'une variable,
+		donc erreur si la ligne n'a pas exactement un noeud avec exactement un mot
+			/!\ pas le comportement exact de Bash, mais plutot logique
+			/!\ l'assignation de variable passe quand meme par shellvar et pathname expansion
+- gestion de la variable spéciale $? = exit status de la dernière exécution
+	-> documentation sur les valeurs des exit status, et comment les interpréter
+
+- dans Parsing1, modifier la gestion des guillemets,
+	pour que par exemple `"a"'b'c` soit considéré comme un seul token
+- gestion du heredoc : tous les heredoc sont lus AVANT de commencer l'exécution,
+	donc leur contenu doit être stocké dans un fichier temporaire,
+		dont le nom remplace la string EOF dans le tableau <node.redir_words>
+
+- comprendre a quoi servent toutes les fonctions dispos et qu'on a pas encore utilisees
+- passer en revue les cas particuliers de
+https://docs.google.com/spreadsheets/d/1uJHQu0VPsjjBkR4hxOeCMEt3AOM1Hp_SmUzPFhAH-nA/edit#gid=0
+	vérifier si on les gère sans segfault + sans fuite de mémoire + de manière justifiable
 
 */

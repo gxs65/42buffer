@@ -6,20 +6,18 @@
 // 		and returns a pointer to the shellvar_value string inside <data.env>
 char	*ft_parse3_find_sv(t_data *data, char *name, int len_sv)
 {
-	int		ind_in_env;
-	char	*line;
+	t_var	*var;
 
 	ft_printf(LOGSV, "         \t<find_shellvar> on %s with len %d\n",
 		name, len_sv);
-	ind_in_env = 0;
-	while (data->env[ind_in_env])
+	var = data->env;
+	while (var)
 	{
-		line = data->env[ind_in_env];
-		if ((int)(ft_strlen(line)) > len_sv && line[len_sv] == '='
-			&& strncmp(name, data->env[ind_in_env], len_sv) == 0)
-			return (data->env[ind_in_env] + len_sv + 1);
-		ind_in_env++;
+		if (ft_strncmp(var->name, name, len_sv) == 0)
+			return (var->value);
+		var = var->next;
 	}
+	ft_printf(LOGSV, "         \t<find_shellvar> found nothing\n");
 	return (NULL);
 }
 
@@ -59,8 +57,7 @@ int	ft_parse3_substitute_sv(char **tok, char *value_sv, int ind_sv, int len_sv)
 	char	*swapper;
 	int		len_newtok;
 
-	len_newtok = ft_strlen(*tok) + ft_strlen(value_sv)
-		- len_sv - 1;
+	len_newtok = ft_strlen(*tok) + ft_strlen(value_sv) - len_sv - 1;
 	swapper = malloc((len_newtok + 1) * sizeof(char));
 	if (!swapper)
 		return (1);

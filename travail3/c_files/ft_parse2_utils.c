@@ -27,7 +27,6 @@ t_node	*ft_node_new(void)
 	if (!node)
 		return (NULL);
 	node->type = -1;
-	node->back = NULL;
 	node->child_1 = NULL;
 	node->child_2 = NULL;
 	node->cmd_tokens_inds = NULL;
@@ -42,5 +41,8 @@ t_node	*ft_node_new(void)
 	node->ind_end_token = -1;
 	node->fd_in = 0;
 	node->fd_out = 1;
+	node->fd_in_orig = -1;
+	node->fd_out_orig = -1;
+	node->depth = 0;
 	return (node);
 }

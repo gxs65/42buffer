@@ -7,12 +7,10 @@ int	ft_exec4_var_existing(t_data *data, t_node *current,
 	ft_printf(LOGSV, "[EXEC4] Updating variable %s with value %s\n",
 		var->name, value);
 	free(var->value);
-	if (current->nb_cmd_words == 1)
-		var->value = ft_strdup("");
-	else
-		var->value = ft_strdup(current->cmd_words[1]);
+	var->value = ft_strdup(value);
+	free(value);
 	if (!var->value)
-		return (1);
+		return (KILL_MALLOC_ERROR);
 	return (0);
 }
 
@@ -24,12 +22,10 @@ int	ft_exec4_var_new(t_data *data, t_node *current, char *value)
 
 	ft_printf(LOGSV, "[EXEC4] New variable named %s with value %s\n",
 		current->cmd_words[0], value);
-	if (current->nb_cmd_words == 1)
-		var = ft_var_new(current->cmd_words[0], "", 0);
-	else
-		var = ft_var_new(current->cmd_words[0], current->cmd_words[1], 0);
+	var = ft_var_new(current->cmd_words[0], value, 0);
+	free(value);
 	if (!var)
-		return (1);
+		return (KILL_MALLOC_ERROR);
 	data->env = ft_var_push_back(data->env, var);
 	return (0);
 }
@@ -55,18 +51,10 @@ int	ft_exec4_var_assign(t_data *data, t_node *current)
 		value = ft_strjoin_str_array(current->nb_cmd_words - 1,
 			current->cmd_words + 1, " ");
 	if (!value)
-		return (1);
+		return (KILL_MALLOC_ERROR);
 	var = ft_var_find_by_name(data->env, current->cmd_words[0]);
-	if (var && ft_exec4_var_existing(data, current, var, value))
-	{
-		free(value);
-		return (1);
-	}
-	else if (ft_exec4_var_new(data, current, value))
-	{
-		free(value);
-		return (1);
-	}
-	free(value);
-	return (0);
+	if (var)
+		return (ft_exec4_var_existing(data, current, var, value));
+	else
+		return (ft_exec4_var_new(data, current, value));
 }

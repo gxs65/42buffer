@@ -47,7 +47,7 @@ void	ft_parse3_display_cmd_tree(t_data *data, t_node *current, int depth)
 {
 	int		ind;
 	char	*descriptors[] = {"(null)", "input", "heredoc",
-							"trunc", "append", "leaf",
+							"trunc", "append", "cmd",
 							"pipe", "and", "or", "par", "par", "equal"};
 
 	if (depth == 0)

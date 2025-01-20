@@ -10,10 +10,12 @@ int	ft_exec1_pipe_final_wait(t_data *data, t_node *current,
 	close(pipe_fds[0]);
 	close(pipe_fds[1]);
 	waitpid(pipe_pids[0], &exit_status, 0);
+	exit_status = ft_exec1_interpret_exit_status(exit_status);
 	ft_printf(LOGSV, "[EXEC1 - MAIN %d] node type %d at %p - \
 end of wait on processes for child_1, exit_status = %d\n",
 		current->depth, current->type, current, exit_status);
 	waitpid(pipe_pids[1], &exit_status, 0);
+	exit_status = ft_exec1_interpret_exit_status(exit_status);
 	ft_printf(LOGSV, "[EXEC1 - MAIN %d] node type %d at %p - \
 end of wait on processes for child_2, exit_status = %d\n",
 		current->depth, current->type, current, exit_status);
@@ -30,10 +32,7 @@ int	ft_exec1_pipe_fork_child2(t_data *data, t_node *current,
 
 	pipe_pids[1] = fork();
 	if (pipe_pids[1] == -1)
-	{
-		ft_printf(LOGS, "! error when forking process for pipe child_2\n");
-		return (1);
-	}
+		return (KILL_FORK_ERROR);
 	else if (pipe_pids[1] == 0)
 	{
 		close(pipe_fds[1]);
@@ -60,10 +59,7 @@ int	ft_exec1_pipe_fork_child1(t_data *data, t_node *current,
 
 	pipe_pids[0] = fork();
 	if (pipe_pids[0] == -1)
-	{
-		ft_printf(LOGS, "! error when forking process for pipe child_1\n");
-		return (1);
-	}
+		return (KILL_FORK_ERROR);
 	else if (pipe_pids[0] == 0)
 	{
 		close(pipe_fds[0]);
@@ -91,10 +87,7 @@ int	ft_exec1_exec_node_pipe(t_data *data, t_node *current, int depth)
 	pid_t	pipe_pids[2];
 
 	if (pipe(pipe_fds))
-	{
-		ft_printf(LOGS, "! error when creating a pipe\n");
-		return (1);
-	}
+		return (KILL_PIPE_ERROR);
 	ft_printf(LOGSV, "[EXEC1 - MAIN %d] node type %d at %p - PIPE < %d > %d\n",
 		depth, current->type, current, pipe_fds[0], pipe_fds[1]);
 	current->child_1->fd_in = current->fd_in;

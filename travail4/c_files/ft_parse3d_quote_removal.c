@@ -32,6 +32,8 @@ void	ft_parse3_remove_quotes(char *word)
 	word[ind_in_copy] = '\0';
 }
 
+// Removes quote from a node's command words ;
+// cannot fail since no malloc is used (word copied inside itself)
 void	ft_parse3_remove_quotes_cmd(t_data *data, t_node *current)
 {
 	int	ind;
@@ -49,6 +51,8 @@ void	ft_parse3_remove_quotes_cmd(t_data *data, t_node *current)
 	}
 }
 
+// Removes quote from a node's redir words ;
+// cannot fail since no malloc is used (word copied inside itself)
 void	ft_parse3_remove_quotes_redir(t_data *data, t_node *current)
 {
 	int	ind;

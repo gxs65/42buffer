@@ -8,12 +8,16 @@
 // 		- quote removal
 int	ft_parse3_expand(t_data *data)
 {
+	int	ret;
+
 	ft_printf(LOGS, "[PARSE3] Beginning parse3 = \
 		a) shellvar exp, b) resplit, c) pathname exp, d) quote removal\n");
-	if (ft_parse3_stepA_expand_shellvar(data))
-		return (1);
-	if (ft_parse3_stepsBCD_recurr(data, data->root))
-		return (1);
+	ret = ft_parse3_stepA_expand_shellvar(data);
+	if (ret)
+		return (ret);
+	ret = ft_parse3_stepsBCD_recurr(data, data->root);
+	if (ret)
+		return (ret);
 	return (0);
 }
 
@@ -36,8 +40,40 @@ int	ft_parse3_stepA_expand_shellvar(t_data *data)
 		if (data->tokens->type[pos_tok] == CMD
 			&& ft_strlen(data->tokens->name[pos_tok]) > 1
 			&& ft_parse3_expand_sv_on_tok(data, pos_tok))
-			return (1);
+			return (KILL_MALLOC_ERROR);
 		pos_tok++;
+	}
+	return (0);
+}
+
+// Performs steps B (replit) C (wildcard expansion) D (quote removal)
+// on command and redir tokens according to node type
+// (error cases : 	only malloc for resplit on cmd tokens,
+// 					split and expansion giving 0 or >tokens on redir tokens,
+// 					opening directory for wildcard expansion)
+int	ft_parse3_perform_stepsBCD(t_data *data, t_node *current)
+{
+	int	ret;
+
+	if (current->type == CMD || current->type == EQUAL)
+	{
+		if (ft_parse3_resplit_cmd_tokens(data, current))
+			return (KILL_MALLOC_ERROR);
+		ret = ft_parse3_expand_pathname_cmd(data, current);
+		if (ret)
+			return (ret);
+		ft_parse3_remove_quotes_cmd(data, current);
+	}
+	if (current->type == CMD || current->type == EQUAL
+		|| current->type == OPEN)
+	{
+		ret = ft_parse3_resplit_redir_tokens(data, current);
+		if (ret)
+			return (ret);
+		ret = ft_parse3_expand_pathname_redir(data, current);
+		if (ret)
+			return (ret);
+		ft_parse3_remove_quotes_redir(data, current);
 	}
 	return (0);
 }
@@ -53,28 +89,23 @@ int	ft_parse3_stepA_expand_shellvar(t_data *data)
 //  CMD and PARENTHESIS nodes both may have redir tokens)
 int	ft_parse3_stepsBCD_recurr(t_data *data, t_node *current)
 {
-	ft_printf(LOGSV, "[PARSE3] b-c-d) recurr, node type %d\n", current->type);
-	if (current->type == CMD || current->type == EQUAL)
-	{
-		if (ft_parse3_resplit_cmd_tokens(data, current))
-			return (1);
-		if (ft_parse3_expand_pathname_cmd(data, current))
-			return (1);
-		ft_parse3_remove_quotes_cmd(data, current);
-	}
-	if (current->type == CMD || current->type == EQUAL
-		|| current->type == OPEN)
-	{
-		if (ft_parse3_resplit_redir_tokens(data, current))
-			return (1);
-		if (ft_parse3_expand_pathname_redir(data, current))
-			return (1);
-		ft_parse3_remove_quotes_redir(data, current);
-	}
+	int	ret;
 
-	if (current->child_1 && ft_parse3_stepsBCD_recurr(data, current->child_1))
-		return (1);
-	if (current->child_2 && ft_parse3_stepsBCD_recurr(data, current->child_2))
-		return (1);
+	ft_printf(LOGSV, "[PARSE3] b-c-d) recurr, node type %d\n", current->type);
+	ret = ft_parse3_perform_stepsBCD(data, current);
+	if (ret)
+		return (ret);
+	if (current->child_1)
+	{
+		ret = ft_parse3_stepsBCD_recurr(data, current->child_1);
+		if (ret)
+			return (ret);
+	}
+	if (current->child_2)
+	{
+		ret = ft_parse3_stepsBCD_recurr(data, current->child_2);
+		if (ret)
+			return (ret);
+	}
 	return (0);
 }

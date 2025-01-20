@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   ft_minishell.h                                     :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: abedin <abedin@student.42.fr>              +#+  +:+       +#+        */
+/*   By: administyrateur <administyrateur@studen    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/01/06 15:19:39 by ilevy             #+#    #+#             */
-/*   Updated: 2025/01/18 04:23:08 by abedin           ###   ########.fr       */
+/*   Updated: 2025/01/20 15:57:45 by administyra      ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -41,10 +41,26 @@
 # define CLOSE		10 // )
 # define EQUAL		11 // =
 
-// Macros identifying errors
-// that must make minishell reprompt (STOP) / exit (KILL)
-# define KILL_MALLOC_ERROR 			128
-# define STOP_ESYNTAX_VAR_ASSIGN	130
+// Custom error codes
+// 		- 0  < KILL codes < 32  : fatal errors, cause minishell to exit
+// 		- 31 < STOP codes < 128 : non-fatal errors, cause minishell to reprompt
+# define KILL_MALLOC_ERROR			16
+# define KILL_SIGACTION_ERROR		17
+# define KILL_ENVFORMAT_ERROR		18
+# define KILL_OPENCWD_ERROR			19
+# define KILL_FORK_ERROR			20
+# define KILL_PIPE_ERROR			21
+# define STOP_OPEN_ERROR			32
+# define STOP_SYNTAX_ERROR			33
+// Like in Bash, processes forked so that they execve a specific command
+// may also exit with error codes that donot affect shell (no stop/reprompt)
+// 		- code = 125 : error of system call during execve preparation
+// 		- code = 126/127 : executable not found or no exec right
+// 		- code >=128 : process received a terminating signal
+// 		- 0 < code < 125 : error code defined by program invoked with execve
+# define CMD_SYSCALL_ERROR			125
+# define CMD_NOXRIGHT_ERROR			126
+# define CMD_NOEXEC_ERROR			127
 
 // Maximal length of a path to a certain file
 // (not certain wether linux kernel really limits path length,
@@ -83,7 +99,7 @@ typedef struct s_token
 // A node in the command tree, with
 // 		- a type, among the type macros CMD/PIPE/OPEN/AND/OR
 // 		- reference to the two potential children nodes
-// 		- cmd and redir tokens (+ words) string arrays
+// 		- cmd and redir tokens (+ words) string arrays, null-terminated
 // 		- input/output file descriptors
 typedef struct s_node 
 {
@@ -140,15 +156,21 @@ typedef struct s_data
 	t_var	*env;
 }				t_data;
 
-// INIT1
-int		ft_init1_det_path(t_data *data);
-int		ft_init1_retrieve_env(t_data *data, char **envp);
-int		ft_strcmp(char *s1, char *s2);
+// VARIABLE LINKED LIST
 t_var	*ft_var_new(char *name, char *value, int is_in_env);
 t_var	*ft_var_push_back(t_var *start, t_var *new_var);
+void	ft_var_delone(t_var *var);
+void	ft_var_list_clear(t_var *current);
 t_var	*ft_var_find_by_name(t_var *current, char *name);
+int		ft_strcmp(char *s1, char *s2);
+
+// INIT
+int		ft_init1_retrieve_env(t_data *data, char **envp);
+int		ft_init2_setup_sighandling(t_data *data);
+int		ft_init3_det_path(t_data *data);
 
 // PARSE1
+int		ft_parse1_tokenize(t_data *data);
 void	ft_parse1_display_tokens(t_data *data);
 int		ft_same_char(char first, char second);
 char	**ft_create_tokens(char *line);
@@ -195,6 +217,8 @@ int		ft_parse3_resplit_redir_tokens(t_data *data, t_node *current);
 
 int		ft_parse3_expand_pathname_cmd(t_data *data, t_node *current);
 int		ft_parse3_expand_pathname_redir(t_data *data, t_node *current);
+int		ft_parse3_count_pathname(char *pattern);
+int		ft_parse3_store_pathname(char *pattern, char **store, int *index_to_incr);
 
 void	ft_parse3_remove_quotes(char *word);
 void	ft_parse3_remove_quotes_cmd(t_data *data, t_node *current);
@@ -213,15 +237,12 @@ int		free_strs_tab_upto(char **tab, int lim);
 int		free_strs_tab_nullterm(char **tab);
 void	ft_display_string_array(char **array, int len);
 
-// PARSEX
-int		ft_parse3_count_pathname(char *pattern);
-int		ft_parse3_store_pathname(char *pattern, char **store, int *index_to_incr);
-
 // EXEC
 void	ft_exec3_execcmd(t_data *data, t_node *current);
 int		ft_exec2_apply_redirections(t_data *data, t_node *current);
 void	ft_exec2_close_redirections(t_data *data, t_node *current);
 int		ft_exec1_exectree_recurr(t_data *data, t_node *current, int depth);
+int		ft_exec1_interpret_exit_status(int exit_status);
 
 int		ft_exec1_exec_node_pipe(t_data *data, t_node *current, int depth);
 int		ft_exec1_exec_node_par(t_data *data, t_node *current, int depth);

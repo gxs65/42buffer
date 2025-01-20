@@ -15,10 +15,7 @@ int	ft_parse3_count_redir_words_resplit(t_data *data, t_node *current)
 		nb_splitted = ft_count_tokens_space(
 			data->tokens->name[current->redir_tokens_inds[ind_token_in_node]]);
 		if (nb_splitted != 1)
-		{
-			ft_printf(LOGS, "! ERROR : 0 or >1 redir words after resplit\n");
-			return (1);
-		}
+			return (STOP_SYNTAX_ERROR);
 		current->nb_redir_words++;
 		ind_token_in_node += 2;
 	}
@@ -53,8 +50,6 @@ int	ft_parse3_store_redir_words_resplit(t_data *data, t_node *current)
 	}
 	return (0);
 }
-// TODO : transform to act like <store_pathname> : give <current.redir_words>
-// as argument to the splitter so that it fills it with the found tokens
 
 // Counts the redirection words after split by whitespace :
 // 		this number must be equal to nb_redir_tokens / 2,

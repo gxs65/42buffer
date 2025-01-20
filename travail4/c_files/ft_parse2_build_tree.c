@@ -2,11 +2,12 @@
 
 // Applies recursion on from 1 node to its 2 children :
 // each child receives the part of the chunk parent's chunk
-// that is left/right of the meta-character at <ind>
+// that is left/right of the meta-character at <ind> (OR/AND/PIPE)
 int	ft_parse2_recurr_logical_pipe(t_data *data, t_node *current, int ind)
 {
 	int	start;
 	int	end;
+	int	ret;
 
 	start = current->ind_start_token;
 	end = current->ind_end_token;
@@ -16,11 +17,13 @@ int	ft_parse2_recurr_logical_pipe(t_data *data, t_node *current, int ind)
 	current->child_1 = ft_node_new();
 	current->child_2 = ft_node_new();
 	if (!(current->child_1) || !(current->child_2))
-		return (1);
-	if (ft_parse2_build_tree_recurr(data, current->child_1, start, ind - 1))
-		return (1);
-	if (ft_parse2_build_tree_recurr(data, current->child_2, ind + 1, end))
-		return (1);
+		return (KILL_MALLOC_ERROR);
+	ret = ft_parse2_build_tree_recurr(data, current->child_1, start, ind - 1);
+	if (ret)
+		return (ret);
+	ret = ft_parse2_build_tree_recurr(data, current->child_2, ind + 1, end);
+	if (ret)
+		return (ret);
 	return (0);
 }
 
@@ -33,10 +36,10 @@ int	ft_parse2_recurr_par(t_data *data, t_node *current, int opar, int cpar)
 	ft_printf(LOGSV, "\tFound closing parenthesis at %d\n", cpar);
 	current->type = OPEN;
 	if (ft_parse2_tokens_ind_par(data, current, opar, cpar))
-		return (1);
+		return (KILL_MALLOC_ERROR);
 	current->child_1 = ft_node_new();
 	if (!(current->child_1))
-		return (1);
+		return (KILL_MALLOC_ERROR);
 	return (ft_parse2_build_tree_recurr(data,
 			current->child_1, opar + 1, cpar - 1));
 }
@@ -44,6 +47,8 @@ int	ft_parse2_recurr_par(t_data *data, t_node *current, int opar, int cpar)
 // Ends recursion at a leaf node, of type command (CMD) or assign (EQUAL) :
 // determines the type of the node, retrieves and stores the indexes
 // of its command and redir tokens accordingly, then returns 0
+// 		(<correct_assign> is -1, indicating a syntax error,
+// 		 when the node has an "=" token but not exactly 1 or 2 other tokens)
 int	ft_parse2_endrecurr_leaf(t_data *data, t_node *current)
 {
 	int correct_assign;
@@ -52,18 +57,18 @@ int	ft_parse2_endrecurr_leaf(t_data *data, t_node *current)
 	correct_assign = ft_parse2_has_correct_assign(data, current);
 	ft_printf(LOGSV, "\tHas correct assignment : %d\n", correct_assign);
 	if (correct_assign == -1)
-		return (STOP_ESYNTAX_VAR_ASSIGN);
+		return (STOP_SYNTAX_ERROR);
 	else if (correct_assign)
 	{
 		current->type = EQUAL;
 		if (ft_parse2_tokens_ind_equal(data, current))
-			return (1);
+			return (KILL_MALLOC_ERROR);
 	}
 	else
 	{
 		current->type = CMD;
 		if (ft_parse2_tokens_ind_cmd(data, current))
-			return (1);
+			return (KILL_MALLOC_ERROR);
 	}
 	ft_printf(LOGS, "\t-> is a LEAF node, nb_cmd_tokens = %d\n",
 		current->nb_cmd_tokens);
@@ -81,6 +86,8 @@ int	ft_parse2_build_tree(t_data *data)
 		(data->nb_tokens)++;
 	ft_printf(LOGS, "[PARSE2] Found %d tokens in line\n", data->nb_tokens);
 	data->root = ft_node_new();
+	if (!data->root)
+		return (KILL_MALLOC_ERROR);
 	return (ft_parse2_build_tree_recurr(data, data->root, 0,
 		data->nb_tokens - 1));
 }

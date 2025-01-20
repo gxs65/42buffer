@@ -11,6 +11,7 @@ int	ft_exec1_leaf_final_wait(t_data *data, t_node *current,
 	ft_printf(LOGSV, "[EXEC1 - MAIN %d] node type %d at %p - \
 exec process forked\n", depth, current->type, current);
 	waitpid(pid, &exit_status, 0);
+	exit_status = ft_exec1_interpret_exit_status(exit_status);
 	ft_printf(LOGSV, "[EXEC1 - MAIN %d] node type %d at %p - \
 end of wait on exec process, exit status = %d\n",
 			depth, current->type, current, exit_status);
@@ -31,13 +32,10 @@ int	ft_exec1_exec_node_leaf(t_data *data, t_node *current, int depth)
 	pid_t	pid;
 
 	if (ft_exec2_apply_redirections(data, current))
-		return (1);
+		return (STOP_OPEN_ERROR);
 	pid = fork();
 	if (pid == -1)
-	{
-		ft_printf(LOGS, "! error when forking child process for leaf\n");
-		return (1);
-	}
+		return (KILL_FORK_ERROR);
 	else if (pid == 0)
 	{
 		ft_exec3_execcmd(data, current);

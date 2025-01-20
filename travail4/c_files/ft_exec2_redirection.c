@@ -3,9 +3,15 @@
 void	ft_exec2_close_redirections(t_data *data, t_node *current)
 {
 	if (current->fd_in != current->fd_in_orig)
+	{
 		close(current->fd_in);
+		current->fd_in = current->fd_in_orig;
+	}
 	if (current->fd_out != current->fd_out_orig)
+	{
 		close(current->fd_out);
+		current->fd_out = current->fd_out_orig;
+	}
 }
 
 // Opens the file given by input redir token of index <ind>
@@ -22,7 +28,7 @@ int	ft_exec2_replace_fdin(t_data *data, t_node *current, int ind)
 	current->fd_in = open(current->redir_words[ind], O_RDONLY);
 	if (current->fd_in == -1)
 	{
-		ft_printf(LOGS, "! error when opening file for input redirection\n");
+		ft_printf(2, "%s: could not open file\n", current->redir_words[ind]);
 		return (1);
 	}
 	ft_printf(LOGSV, "[EXEC2] node type %d at %p - \tinputs now from fd %d\n",
@@ -52,7 +58,7 @@ int	ft_exec2_replace_fdout(t_data *data, t_node *current, int ind)
 			O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
 	if (current->fd_out == -1)
 	{
-		ft_printf(LOGS, "! error when opening file for output redirection\n");
+		ft_printf(2, "%s: could not open file\n", current->redir_words[ind]);
 		return (1);
 	}
 	ft_printf(LOGSV, "[EXEC2] node type %d at %p - \toutputs now to fd %d\n",

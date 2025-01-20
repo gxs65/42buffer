@@ -2,8 +2,9 @@
 
 // Counts (in variable <count> how many command words the current node
 // shoud have after pathname expansion
-// 		- the number of command words can only stagnate or increase,
-// 			since a word with '*', but matching no file in CWD, is not changed
+// 		- a word with '*', but matching no file in CWD, is not changed,
+// 			so it adds one to the count (even if <count_pathname> returned 0)
+// 		- therefore, the number of command words can only stagnate or increase
 // 		- return value of <ft_parse_count_pathname> must be checked
 // 			because of potential <opendir>/<readdir> errors
 int	ft_parse3_count_cmd_words_pathname(t_data *data, t_node *current,
@@ -92,13 +93,13 @@ int	ft_parse3_expand_pathname_cmd(t_data *data, t_node *current)
 
 	ft_printf(LOGSV, "         \tc) pathname exp command words\n");
 	if (ft_parse3_count_cmd_words_pathname(data, current, &swapper_nb_cmd_words))
-		return (1);
+		return (KILL_OPENCWD_ERROR);
 	swapper_cmd_words = malloc((swapper_nb_cmd_words + 1) * sizeof(char *));
 	if (!swapper_cmd_words)
-		return (1);
+		return (KILL_MALLOC_ERROR);
 	swapper_cmd_words[swapper_nb_cmd_words] = NULL;
 	if (ft_parse3_store_cmd_words_pathname(data, current, swapper_cmd_words))
-		return (1);
+		return (KILL_MALLOC_ERROR);
 	free_strs_tab_upto(current->cmd_words, current->nb_cmd_words);
 	current->cmd_words = swapper_cmd_words;
 	current->nb_cmd_words = swapper_nb_cmd_words;

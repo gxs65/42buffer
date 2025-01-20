@@ -9,7 +9,7 @@ int	ft_exec1_exec_node_par(t_data *data, t_node *current, int depth)
 	int	ret;
 
 	if (ft_exec2_apply_redirections(data, current))
-		return (1);
+		return (STOP_OPEN_ERROR);
 	current->child_1->fd_in = current->fd_in;
 	current->child_1->fd_out = current->fd_out;
 	ft_printf(LOGSV, "[EXEC1 - MAIN %d] node type %d at %p - PAR recurring\n",

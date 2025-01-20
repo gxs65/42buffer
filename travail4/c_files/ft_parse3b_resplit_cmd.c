@@ -47,10 +47,6 @@ int	ft_parse3_store_cmd_words_resplit(t_data *data, t_node *current)
 	}
 	return (0);
 }
-// TODO : transform to act like <store_pathname> : give <current.cmd_words>
-// as argument to the splitter so that it fills it with th  found tokens
-// 		(the previous count ensures enough space allocated,
-// 		 and it avoids the <malloc> of one <char **>)
 
 // Counts the command words after split by whitespace,
 // allocates a new string array <current.cmd_words> of that size,

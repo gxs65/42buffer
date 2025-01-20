@@ -25,6 +25,22 @@
 		~ renvoyer le exit_status de child_2
 */
 
+// Uses the dedicated macros to interpret processes' exit status
+// which can be either
+// 		- an exit status from normal <exit> or <return> call in forked process
+// 			(either before execve 125/126/127, or after execve for <125)
+// 		- a signal indicator when the process was terminated by a signal
+// 		- something unidentified but definitely non-0 (an error)
+int	ft_exec1_interpret_exit_status(int exit_status)
+{
+	if (WIFEXITED(exit_status))
+		exit_status = WEXITSTATUS(exit_status);
+	else if (WIFSIGNALED(exit_status))
+		exit_status = 128;
+	else
+		exit_status = 1;
+}
+
 // Recursively goes through the nodes of the command tree,
 // 		by selecting, ccording to node type, the adequate function,
 // 			which either recur (OPEN/PIPE/LOGICAL) or end recursion (CMD/EQUAL)
@@ -46,11 +62,6 @@ int	ft_exec1_exectree_recurr(t_data *data, t_node *current, int depth)
 		return (ft_exec1_exec_node_par(data, current, depth));
 	else if (current->type == PIPE)
 		return (ft_exec1_exec_node_pipe(data, current, depth));
-	else if (current->type == AND || current->type == OR)
-		return (ft_exec1_exec_node_logical(data, current, depth));
 	else
-	{
-		ft_printf(LOGS, "! error when trying to read current node type\n");
-		return (1);
-	}
+		return (ft_exec1_exec_node_logical(data, current, depth));
 }

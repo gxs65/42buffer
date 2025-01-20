@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   ft_parse1_tokenize.c                               :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: abedin <abedin@student.42.fr>              +#+  +:+       +#+        */
+/*   By: administyrateur <administyrateur@studen    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/01/10 03:59:35 by ilevy             #+#    #+#             */
-/*   Updated: 2025/01/18 01:30:39 by abedin           ###   ########.fr       */
+/*   Updated: 2025/01/19 18:43:53 by administyra      ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -183,4 +183,24 @@ int	ft_token_amount(char *line)
 		i++;
 	}
 	return (amount);
+}
+
+// Uses readline to get the next line entered by the user,
+// and creates the 2 arrays containing this line's tokens' names and types
+int	ft_parse1_tokenize(t_data *data)
+{
+	char	*line;
+
+	line = readline("\033[1;32m>>>\033[0m ");
+	if (!line)
+		return (KILL_MALLOC_ERROR);
+	data->tokens->name = ft_create_tokens(line);
+	if (!data->tokens->name)
+		return (free(line), KILL_MALLOC_ERROR);
+	data->tokens->type = ft_create_types(data->tokens->name);
+	if (!data->tokens->type)
+		return (free(line), KILL_MALLOC_ERROR);
+	add_history(line);
+	free(line);
+	return (0);
 }

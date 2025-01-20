@@ -13,17 +13,14 @@ int	ft_parse3_count_redir_words_pathname(t_data *data, t_node *current)
 	ind_word = 0;
 	while (ind_word < current->nb_redir_words)
 	{
-		if (ft_strchrp_nonquoted(current->cmd_words[ind_word], '*', 2, 0)
+		if (ft_strchrp_nonquoted(current->redir_words[ind_word], '*', 2, 0)
 			!= -1)
 		{
 			ret = ft_parse3_count_pathname(current->redir_words[ind_word]);
 			if (ret  == -1)
-				return (1);
+				return (KILL_OPENCWD_ERROR);
 			else if (ret != 1)
-			{
-				ft_printf(LOGS, "! ERROR : 0 or >1 redir words after pathname expansion\n");
-				return (1);
-			}
+				return (STOP_SYNTAX_ERROR);
 		}
 		ind_word++;
 	}
@@ -71,18 +68,20 @@ int	ft_parse3_store_redir_words_pathname(t_data *data,
 int	ft_parse3_expand_pathname_redir(t_data *data, t_node *current)
 {
 	char	**swapper_redir_words;
+	int		ret;
 
 	ft_printf(LOGSV, "         \tc) pathname exp redir words\n");
-	if (ft_parse3_count_redir_words_pathname(data, current))
-		return (1);
-	ft_printf(LOGSV, "         \tFound %d words after pathname expansion\n",
+	ret = ft_parse3_count_redir_words_pathname(data, current);
+	if (ret)
+		return (ret);
+	ft_printf(LOGSV, "         \tno ambiguous expansion to 0 or >1 tokens\n",
 		current->nb_redir_words);
 	swapper_redir_words = malloc((current->nb_redir_words + 1) * sizeof(char *));
 	if (!swapper_redir_words)
-		return (1);
+		return (KILL_MALLOC_ERROR);
 	swapper_redir_words[current->nb_redir_words] = NULL;
 	if (ft_parse3_store_redir_words_pathname(data, current, swapper_redir_words))
-		return (1);
+		return (KILL_MALLOC_ERROR);
 	free_strs_tab_upto(current->redir_words, current->nb_redir_words);
 	current->redir_words = swapper_redir_words;
 	return (0);

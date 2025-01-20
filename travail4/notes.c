@@ -70,6 +70,8 @@
 - avoir un prompt qui donne aussi le cwd (demande un malloc de plus)
 - dans la pathname expansion :	\ ne pas tenir compte des '*' entre guillemets
 								\ faire un quote removal sur les tokens avant expansion
+- le builtin <export> doit accepter les commandes du type `export s=1`
+- verifier qu'on produit bien une erreur de syntaxe quand on a un noeud parenthese avec un token de redir qui est "="
 
 === DOCUMENTATION SUR LES FONCTIONS DU SUJET
 - commande "bash" : option "--posix" pour la version minimale conforme a POSIX
@@ -269,9 +271,9 @@
 	  <node.cmd_tokens_inds>						de Parse2 construction de l'arbre
 	\ <node.redir_words>
 	  <node.cmd_words>								de Parse3 resplit, remplace dans Parse3 expansion des pathnames
--  variables COURT-TERME (free dans la fonction qui l'a allouee)
+-  variables COURT-TERME (free dans la fonction qui l'a allouee, ou pas si arrive a execve)
 	\ <execfile> (char *)							de Exec3 recuperation du nom de fichier executable
-	\ <envp> (char **)								de Exec3 reconstitution de l'enc pour le passer a execve
+	\ <envp> (char **)								de Exec3 reconstitution de l'env pour le passer a execve
 	\ <value> (char *)								de Exec4 valeur de la variable shell
 
 === COMMUNICATION ENTRE VERSIONS
@@ -326,8 +328,8 @@
 	\ nom sans "/" : dans le répertoire courant
 	\ nom avec "/" en premier caractère : chemin absolu
 	\ nom avec "/" à l'intérieur : chemin relatif
-- pattern-matching des expansions de "*"
-	+ cas particuliers de "*" suivi de "/", et "./" suivi de "*"
++ pattern-matching des expansions de "*"
+	et cas particuliers de "*" suivi de "/", et "./" suivi de "*"
 
 - gestion des signaux, avec une seule variable globale
 	\ que doivent faire exactement Ctrl+C et Ctrl+D ?
@@ -339,8 +341,8 @@
 	\ ajout de variables sans export <=> ajout d'éléments à la liste chaînée
 	\ export et unset <=> modification du booléen dans la liste chaînée
 	\ fonction transformant la liste chaînée en un tableau de chaînes de caracteres,
-		pour pouvoir donner ce tableau en paramère à execve
-- détection des noeuds ou le premier mot contient un "=" :
+		pour pouvoir donner ce tableau en paramètre à execve
++ détection des noeuds ou le premier mot contient un "=" :
 	elles définissent la valeur d'une variable,
 		donc erreur si la ligne n'a pas exactement un noeud avec exactement un mot
 			/!\ pas le comportement exact de Bash, mais plutot logique

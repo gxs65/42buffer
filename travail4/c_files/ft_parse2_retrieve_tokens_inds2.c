@@ -21,12 +21,14 @@ int	ft_parse2_has_no_equal(t_data *data, t_node *current)
 // 		-> returns	(0) when no "="
 // 					(-1) when "=" with syntax error
 //					(1) when "=" with correct syntax
-// Conditiens checked :
-// 		- if the node has 0, 1 or >3 tokens, it can't be an assign node,
-// 			so syntax is correct of no token is "="
-// 		- if the node has 2 or 3 tokens, it is an assign node
-// 			when the second token is "=", and if so the first
-// 			(and second, if there is one) must be words ("cmd")
+// Conditions checked :
+// 		- if the node has 0, 1 or >3 tokens (<=> it can't be an assign node)
+// 			and it has no token "=", syntax is correct
+// 		- else if the node has 2 or 3 tokens
+// 			and none is "=", syntax is correct
+// 		- else if the node has 2 or 3 tokens,
+// 			and the 2nd is "=" and others are "cmd", syntax is correct
+// 		- in any other case, there is a syntax error
 int	ft_parse2_has_correct_assign(t_data *data, t_node *current)
 {
 	int	ind;
@@ -35,10 +37,14 @@ int	ft_parse2_has_correct_assign(t_data *data, t_node *current)
 	nb_tokens = current->ind_end_token - current->ind_start_token + 1;
 	if (nb_tokens != 3 && nb_tokens != 2)
 		return (ft_parse2_has_no_equal(data, current));
-	if (data->tokens->type[current->ind_start_token + 1] != EQUAL)
+	if ((nb_tokens == 2 ||
+		data->tokens->type[current->ind_start_token + 2] != EQUAL)
+		&& data->tokens->type[current->ind_start_token + 1] != EQUAL
+		&& data->tokens->type[current->ind_start_token] != EQUAL)
 		return (0);
 	else if ((nb_tokens == 2
 		|| data->tokens->type[current->ind_start_token + 2] == CMD)
+		&& data->tokens->type[current->ind_start_token + 1] == EQUAL
 		&& data->tokens->type[current->ind_start_token] == CMD)
 		return (1);
 	else

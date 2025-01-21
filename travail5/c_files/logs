@@ -1,0 +1,75 @@
+[INIT1] Creating var element for name SYSTEMD_EXEC_PID, value 559513
+[INIT1] Creating var element for name SSH_AUTH_SOCK, value /run/user/109716/keyring/ssh
+[INIT1] Creating var element for name SESSION_MANAGER, value local/paul-f3Ar5s9.clusters.42paris.fr:@/tmp/.ICE-unix/557687,unix/paul-f3Ar5s9.clusters.42paris.fr:/tmp/.ICE-unix/557687
+[INIT1] Creating var element for name GNOME_TERMINAL_SCREEN, value /org/gnome/Terminal/screen/ec875997_980a_410a_91fe_0456ba4c304b
+[INIT1] Creating var element for name LANG, value en_US.UTF-8
+[INIT1] Creating var element for name XDG_CURRENT_DESKTOP, value ubuntu:GNOME
+[INIT1] Creating var element for name XDG_GREETER_DATA_DIR, value /var/lib/lightdm-data/abedin
+[INIT1] Creating var element for name LIBVIRT_DEFAULT_URI, value qemu:///system
+[INIT1] Creating var element for name GPG_AGENT_INFO, value /run/user/109716/gnupg/S.gpg-agent:0:1
+[INIT1] Creating var element for name DESKTOP_SESSION, value ubuntu
+[INIT1] Creating var element for name QT_IM_MODULE, value ibus
+[INIT1] Creating var element for name XDG_MENU_PREFIX, value gnome-
+[INIT1] Creating var element for name XDG_SESSION_PATH, value /org/freedesktop/DisplayManager/Session8
+[INIT1] Creating var element for name USER, value abedin
+[INIT1] Creating var element for name DBUS_SESSION_BUS_ADDRESS, value unix:path=/run/user/109716/bus
+[INIT1] Creating var element for name DOCKER_HOST, value unix:///run/user/109716/docker.sock
+[INIT1] Creating var element for name SSH_AGENT_LAUNCHER, value gnome-keyring
+[INIT1] Creating var element for name GTK_MODULES, value gail:atk-bridge
+[INIT1] Creating var element for name XDG_CONFIG_DIRS, value /etc/xdg/xdg-ubuntu:/etc/xdg
+[INIT1] Creating var element for name GTK_IM_MODULE, value ibus
+[INIT1] Creating var element for name XDG_SESSION_DESKTOP, value ubuntu
+[INIT1] Creating var element for name QT_ACCESSIBILITY, value 1
+[INIT1] Creating var element for name GNOME_DESKTOP_SESSION_ID, value this-is-deprecated
+[INIT1] Creating var element for name KRB5CCNAME, value FILE:/tmp/krb5cc_109716_LrkkrQ
+[INIT1] Creating var element for name LOGNAME, value abedin
+[INIT1] Creating var element for name GNOME_TERMINAL_SERVICE, value :1.99
+[INIT1] Creating var element for name VTE_VERSION, value 6800
+[INIT1] Creating var element for name PATH, value /home/abedin/.local/funcheck/host:/home/abedin/.local/funcheck/host:/home/abedin/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+[INIT1] Creating var element for name XDG_RUNTIME_DIR, value /run/user/109716
+[INIT1] Creating var element for name XDG_DATA_DIRS, value /usr/share/ubuntu:/usr/share/gnome:/home/abedin/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/usr/local/share:/usr/share:/var/lib/snapd/desktop
+[INIT1] Creating var element for name XDG_SEAT_PATH, value /org/freedesktop/DisplayManager/Seat0
+[INIT1] Creating var element for name SHELL, value /bin/zsh
+[INIT1] Creating var element for name XMODIFIERS, value @im=ibus
+[INIT1] Creating var element for name XDG_SESSION_TYPE, value x11
+[INIT1] Creating var element for name HOME, value /home/abedin
+[INIT1] Creating var element for name COLORTERM, value truecolor
+[INIT1] Creating var element for name XAUTHORITY, value /home/abedin/.Xauthority
+[INIT1] Creating var element for name PWD, value /home/abedin/Documents/core/cercle3/minishell/travail5/c_files
+[INIT1] Creating var element for name DISPLAY, value :0
+[INIT1] Creating var element for name TERM, value xterm-256color
+[INIT1] Creating var element for name GDMSESSION, value ubuntu
+[INIT1] Creating var element for name XDG_SESSION_CLASS, value user
+[INIT1] Creating var element for name SHLVL, value 1
+[INIT1] Creating var element for name OLDPWD, value /home/abedin/Documents/core/cercle3/minishell/travail5/c_files
+[INIT1] Creating var element for name PS1, value %{[32m%}%d%{[00m%} > 
+[INIT1] Creating var element for name _, value /home/abedin/Documents/core/cercle3/minishell/travail5/c_files/./minishell
+[PARSE1] Tokenisation finished
+[PARSE2] Beginning tree build
+[PARSE2] Found 0 tokens in line
+[PARSE1] Tokenisation finished
+[PARSE2] Beginning tree build
+[PARSE2] Found 0 tokens in line
+[PARSE1] Tokenisation finished
+[PARSE2] Beginning tree build
+[PARSE2] Found 0 tokens in line
+[PARSE1] Tokenisation finished
+[PARSE2] Beginning tree build
+[PARSE2] Found 0 tokens in line
+[PARSE1] Tokenisation finished
+[PARSE2] Beginning tree build
+[PARSE2] Found 0 tokens in line
+[PARSE1] Tokenisation finished
+         token 0: Type trunc        Value >
+         token 1: Type input        Value <
+[PARSE2] Beginning tree build
+[PARSE2] Found 2 tokens in line
+[PARSE2] On node from 0 '>' to 1 '<'
+	Beginning meta-character search
+	Unable to find logical meta-character
+	Unable to find pipe
+	Unable to find parentheses
+	Has correct assignment : 0
+[PARSE2] 	Reading redir tokens of leaf cmd node
+         	Counted 2 redir, 0 cmd tokens
+Error : command line syntax

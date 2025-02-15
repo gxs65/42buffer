@@ -28,6 +28,7 @@ void	ft_draw(t_data *data)
 	int	ind;
 
 	ind = 3;
+	/*
 	while (ind < 4)
 	{
 		data->objects[0].absorption = 0.2 * ind - 0.1;
@@ -38,6 +39,11 @@ void	ft_draw(t_data *data)
 		ft_display_changed_image(data, data->img);
 		ind++;
 	}
+	*/
+	ft_printf(LOGS, "Drawing...\n");
+	ft_calc_rt(data);
+	ft_printf(LOGS, "Displaying...\n");
+	ft_display_changed_image(data, data->img);
 }
 
 // Initialization of the fractol window

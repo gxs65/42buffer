@@ -12,10 +12,10 @@ t_cam	ft_calc_init_camera(t_data *data)
 	camera.hvec = ft_vec_setnorm(ft_vec_init(-1, 0, 0), 1.0);
 	camera.vvec = ft_vec_setnorm(ft_vec_vproduct(camera.dvec, camera.hvec), 1.0);
 
-	camera.fov_angle = 30;
+	camera.fov_angle = 60;
 
 	camera.vport_center = ft_vec_add(camera.pos, camera.dvec);
-	camera.vport_width = 2 * tan(camera.fov_angle / 2);
+	camera.vport_width = 2 * tan(ft_degrees_to_radians(camera.fov_angle) / 2);
 	camera.vport_pix_width = camera.vport_width / (double)(data->img->width);
 	camera.vport_height = camera.vport_width * data->win_ratio;
 	camera.vport_pix_height = camera.vport_height / (double)(data->img->height);

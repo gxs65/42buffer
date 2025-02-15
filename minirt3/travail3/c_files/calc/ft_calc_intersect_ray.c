@@ -26,7 +26,7 @@ double	ft_intersect_ray_sphere(t_ray ray, t_object sphere, t_interval *hit_inter
 }
 
 // Returns -1 if the given ray and object never intersect,
-// 		and the smallest ray scalar of intersection point if they do
+// 		and the scalar <t> to apply to ray to get intersection point if they do
 double	ft_intersect_ray_object(t_ray ray, t_object object, t_interval *hit_interval)
 {
 	if (object.type == SPHERE)

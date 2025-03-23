@@ -1,1 +1,0 @@
-he we can place some primitives, like sphere, plane or cylinder

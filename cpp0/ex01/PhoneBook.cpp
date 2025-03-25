@@ -3,40 +3,59 @@
 
 PhoneBook::PhoneBook()
 {
-	int		ind;
+	ind_new_contact = 0;
+}
 
-	this->ind_new_contact = 0;
-	ind = 0;
-	while (ind < 8)
-	{
-		this->contacts[ind] = NULL;
-		ind++;
-	}
+PhoneBook::~PhoneBook()
+{
 }
 
 Contact *PhoneBook::get_contact(int ind)
 {
-	return (this->contacts[ind]);
+	return (&(this->contacts[ind]));
 }
 
-void	PhoneBook::create_contact()
+void	PhoneBook::add_contact()
 {
-	Contact		*new_contact;
-
-	new_contact = new Contact;
-	this->contacts[ind_new_contact] = new_contact;
+	this->contacts[ind_new_contact].update_contact();
 	ind_new_contact = (ind_new_contact + 1) % 8;
+}
+
+void	PhoneBook::display_table()
+{
+	int	ind;
+
+	ind = 0;
+	while (ind < 8)
+	{
+		if (this->contacts[ind].get_contact_set())
+		{
+			std::cout << "[" << ind << "]       |"; 
+			this->contacts[ind].display_table();
+		}
+		ind++;
+	}
 }
 
 void	PhoneBook::view_contacts()
 {
 	int			ind;
+	const char	*input_c_str;
+	std::string	input;
 
-	ind = 0;
-	while (ind < 8)
+	if (!(this->contacts[0].get_contact_set()))
 	{
-		if (this->contacts[ind])
-			(this->contacts[ind])->display(0);
-		ind++;
+		std::cout << "No contacts in phonebook\n";
+		return ;
 	}
+	this->display_table();
+	get_input_line("Index of contact to view ?", &input);
+	input_c_str = input.c_str();
+	ind = atoi(input_c_str);
+	std::cout << "Index selected : " << ind << "\n";
+	if (ind < 0 || ind > 7
+		|| !(this->contacts[ind].get_contact_set()))
+		std::cout << "This contact is not set\n";
+	else
+		this->contacts[ind].display_all();
 }

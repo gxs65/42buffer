@@ -26,21 +26,47 @@ std::string	Contact::get_secret()
 	return (this->secret);
 }
 
-void	Contact::display(int include_secret)
+int			Contact::get_contact_set()
 {
-	std::cout << this->firstname << " " << this->lastname << " " << this->nickname
-		<< " " << this->phone_number;
-	if (include_secret)
-		std::cout << " " << this->secret << std::endl;
-	else
-		std::cout << std::endl;
+	return (this->contact_set);
+}
+
+void	Contact::display_table()
+{
+	if (!(this->contact_set))
+		return ;
+	std::cout << std::setfill(' ')
+		<< std::setw(10) << clamp(this->firstname, 10) << "|"
+		<< std::setw(10) << clamp(this->lastname, 10) << "|"
+		<< std::setw(10) << clamp(this->nickname, 10) << "\n";
+}
+
+void	Contact::display_all()
+{
+	if (!(this->contact_set))
+		return ;
+	std::cout << "First name : " << this->firstname << "\n"
+		<< "Last name : " << this->lastname << "\n"
+		<< "Nickname : " << this->nickname << "\n"
+		<< "Phone number : " << this->phone_number << "\n"
+		<< "Secret : " << this->secret << "\n";
 }
 
 Contact::Contact()
 {
-	this->firstname = get_input_line("First name ?");
-	this->lastname = get_input_line("Last name ?");
-	this->nickname = get_input_line("Nickname ?");
-	this->phone_number = get_input_line("Phone number ?");
-	this->secret = get_input_line("Darkest secret ?");
+	this->contact_set = 0;
+}
+
+Contact::~Contact()
+{
+}
+
+void Contact::update_contact()
+{
+	get_input_line("First name ?", &(this->firstname));
+	get_input_line("Last name ?", &(this->lastname));
+	get_input_line("Nickname ?", &(this->nickname));
+	get_input_line("Phone number ?", &(this->phone_number));
+	get_input_line("Darkest secret ?", &(this->secret));
+	this->contact_set = 1;
 }

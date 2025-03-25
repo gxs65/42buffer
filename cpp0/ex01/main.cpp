@@ -1,17 +1,30 @@
 #include "functions.h"
 
-std::string	get_input_line(std::string prompt)
+void	get_input_line(const char *prompt, std::string *buffer)
 {
-	std::string	s;
-
 	std::cout << prompt << " ";
-	std::getline(std::cin, s);
-	while (s.empty())
+	std::getline(std::cin, *buffer);
+	while (buffer->empty())
 	{
 		std::cout << prompt << " ";
-		std::getline(std::cin, s);
+		std::getline(std::cin, *buffer);
 	}
-	return (s);
+}
+
+std::string	clamp(std::string& src, unsigned int max_size)
+{
+	std::string	clamped;
+
+	if (src.size() <= max_size)
+	{
+		clamped = src;
+	}
+	else
+	{
+		clamped = src.substr(0, max_size - 1);
+		clamped.append(".");
+	}
+	return (clamped);
 }
 
 int	main(int ac, char **av)
@@ -26,15 +39,15 @@ int	main(int ac, char **av)
 	exiting = 0;
 	while (!exiting)
 	{
-		command = get_input_line("Command ?");
+		get_input_line("Command ?", &command);
 		if (command.compare("EXIT") == 0)
 			exiting = 1;
 		else if (command.compare("ADD") == 0)
-			pb.create_contact();
+			pb.add_contact();
 		else if (command.compare("VIEW") == 0)
 			pb.view_contacts();
 		else
-			std::cout << "Command is not recognized" << std::endl;
+			std::cout << "This command is not recognized" << std::endl;
 	}
 	
 	return (0);

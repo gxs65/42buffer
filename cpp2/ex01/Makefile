@@ -4,7 +4,7 @@ SRCS = Fixed.cpp main.cpp
 OBJS = $(SRCS:.cpp=.o)
 
 CFLAGS = -Wall -Wextra -Werror -std=c++98
-CC = c++
+CC = clang++
 
 all: $(NAME)
 

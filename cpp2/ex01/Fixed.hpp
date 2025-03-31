@@ -5,11 +5,13 @@
 # include <string>
 # include <cstring>
 # include <stdlib.h>
+# include <stdint.h>
 
 class	Fixed;
 
 int		bitarray_to_int(unsigned char *arr, int size);
 void	fill_bitarray(unsigned char *arr, unsigned char filler, int size);
+void	int_to_bitarray(unsigned char *arr, int n, int size);
 
 // Represents a fixed-point number (FPN),
 // defined by an ordinary 32-bits integer
@@ -37,6 +39,8 @@ class	Fixed
 		// Conversions from FPN
 		float				toFloat(void);
 		int					toInt(void);
+		// Log
+		static void			logRawBitsInt(int n);
 	
 	private:
 		// FPN representation

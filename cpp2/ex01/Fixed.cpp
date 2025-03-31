@@ -71,6 +71,21 @@ void	Fixed::logRawBits(void)
 	std::cout << "\n";
 }
 
+void	Fixed::logRawBitsInt(int n)
+{
+	int	ind;
+
+	std::cout << "<logRawBitsInt> For int : " << n << "\n";
+	std::cout << "--- Sign bit : " << ((n >> 31) & 1) << "\n";
+	std::cout << "--- Integer part bits : ";
+	for (ind = 1; ind < 24; ind++)
+		std::cout << ((n >> (31 - ind)) & 1) << "";
+	std::cout << "\n--- Fractional part bits : ";
+	for (ind = 24; ind < 32; ind++)
+		std::cout << ((n >> (31 - ind)) & 1) << "";
+	std::cout << "\n";
+}
+
 // /!\ Log function posits that <Fixed::nbits_fractional> is 8
 void	Fixed::logFloatRawBits(void)
 {
@@ -248,6 +263,7 @@ float	Fixed::toFloat(void)
 	uint32_t	f_raw;
 	float		f;
 
+	std::cout << "<toFloat> of FPN, current raw integer : " << this->n << "\n";
 	this->sign_bit = 0;
 	fill_bitarray(this->exponent_bits, 0, 8);
 	fill_bitarray(this->mantissa_bits, 0, 23);
@@ -259,22 +275,48 @@ float	Fixed::toFloat(void)
 		f_raw = f_raw | ((uint32_t)(this->exponent_bits[ind]) << (30 - ind));
 	for(ind = 0; ind < 23; ind++)
 		f_raw = f_raw | ((uint32_t)(this->mantissa_bits[ind]) << (22 - ind));
+	std::cout << "[CONV TO F] raw float stored in int32 is : " << f_raw << "\n";
 	std::memcpy(&f, &f_raw, sizeof(float));
 	return (f);
 }
 
 void	Fixed::convertToFloatBits(void)
 {
-	int	ind;
-	int	orig;
+	int		ind_after_significant;
+	int		ind_start_significant;
+	int		orig;
+	int		exponent;
 
+	std::cout << "[CONV TO F] computing raw exponent/mantissa bits\n";
 	orig = this->n;
 	this->sign_bit = (orig >> 31) & 1;
-	orig = orig * -1;
-	ind = 1;
-	while (((orig >> (31 - ind)) & 1) == 0)
-		ind++;
-	
+	if (this->sign_bit)
+	{
+		orig = orig * -1;
+		std::cout << "[CONV TO F] After getting back to positive :\n";
+		Fixed::logRawBitsInt(orig);
+	}
+	ind_start_significant = 1;
+	if (orig == (1 << 31))
+		exponent = 23;
+	else
+	{
+		while (((orig >> (31 - ind_start_significant)) & 1) == 0)
+			ind_start_significant++;
+		exponent = 31 - Fixed::nbits_fractional - ind_start_significant;
+	}
+	std::cout << "[CONV TO F] ind of 1st significant bit is : " << ind_start_significant << "\n";
+	std::cout << "[CONV TO F] -> exponent to put in exponent bits : " << exponent << "\n";
+	int_to_bitarray(this->exponent_bits, 127 + exponent, 8);
+	ind_after_significant = 0; // beginning 1 bit after first significant bit, because mantissa has 1 invisible leading bit
+	while (ind_start_significant + ind_after_significant + 1 < 32 && ind_after_significant < 23)
+	{
+		//std::cout << "bit at " << ind_start_significant + ind_after_significant + 1 << " is " << ((orig >> (31 - ind_start_significant - ind_after_significant - 1)) & 1) << "\n";
+		//std::cout << "\tcopied to bit of mantissa at " << ind_after_significant << "\n"; 
+		this->mantissa_bits[ind_after_significant] = ((orig >> (31 - ind_start_significant - ind_after_significant - 1)) & 1);
+		ind_after_significant++;
+	}
+	this->logFloatRawBits();
 }
 
 // CONST STATIC CLASS MEMBERS

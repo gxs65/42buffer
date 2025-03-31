@@ -81,6 +81,18 @@ void	fill_bitarray(unsigned char *arr, unsigned char filler, int size)
 	}
 }
 
+void	int_to_bitarray(unsigned char *arr, int n, int size)
+{
+	int	ind;
+
+	ind = 0;
+	while (n != 0 && ind < size)
+	{
+		arr[size - ind - 1] = n % 2;
+		n = n / 2;
+		ind++;
+	}
+}
 int		main(int ac, char **av)
 {
 	(void)ac;
@@ -88,6 +100,10 @@ int		main(int ac, char **av)
 
 	
 	Fixed	a((float)atof(av[1]));
+	float	f;
+
+	f = a.toFloat();
+	std::cout << "a converted to integer is : " << f << "\n";
 	//a.convertFromFloat(atof(av[1]));
 	//a.convertFromInt(atoi(av[1]));
 	

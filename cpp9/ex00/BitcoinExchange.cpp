@@ -1,7 +1,5 @@
 #include "BitcoinExchange.hpp"
 
-// gerer le cas database vide
-
 /////////////////////////////
 // CANONICAL ORTHODOX FORM //
 /////////////////////////////

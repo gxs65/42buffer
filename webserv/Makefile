@@ -1,6 +1,8 @@
 NAME = webserv
 
-SRCS = utils.cpp Server.cpp main.cpp
+SRCS = 	Server.cpp 		ClientHandler.cpp \
+		main.cpp 		utils.cpp \
+		cfgParsing.cpp
 OBJS = $(SRCS:.cpp=.o)
 
 CFLAGS = -Wall -Wextra -Werror -std=c++98

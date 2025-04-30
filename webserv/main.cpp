@@ -1,18 +1,34 @@
-#include <string>
-#include <iostream>
-#include "Server.hpp"
+#include "webserv.hpp"
+
+volatile int	g_global_signal;
+
+void	handleSigint(int sigNum)
+{
+	if (sigNum == SIGINT)
+		g_global_signal = 1;
+}
 
 int	main(int ac, char **av)
 {
-	Server		serv("cfg");
+	//Server		serv("cfg");
 
 	(void)ac;
 	(void)av;
+	g_global_signal = 0;
+	std::signal(SIGINT, &handleSigint);
+
+	/*
 	if (serv.startServer())
 		return (1);
-	if (serv.waitForConnection())
+	if (serv.serverLoop())
 		return (1);
+	std::cout << "Program exiting\n";
+	*/
 
+	std::vector<t_vserver>	v;
+	std::string				cfgFileName = "webserv.conf";
+	parseCfgFile(cfgFileName, v);
+	
 	return (0);
 }
 
@@ -70,10 +86,48 @@ int	main(int ac, char **av)
 		so that <bind> will take possession of the given port even if there is still a connection in TIME_WAIT state using it
 			(the connections of the new program will coexist with the old connection in TIME_WAIT state,
 				the only constraint is the new program won't be able to create a connection with exactly the same "quad" as the old connection)
-	
 
 
+
++ build true server loop with <poll>
++ test some <write> in a socket (see results with curl/nc)
++ catch signals to shutdown server cleanly (close all sockets and return)
+- parsing of config file (always define a default when a directive is absent)
+	\ set port and name of each (virtual) server : `listen address:port`, `server_name name`
+		/!\ server name can be an IP
+	\ set default error pages : `error_page errcode page_uri`
+	\ set maximum allowed size for client request bodies : `client_max_body_size size`
+		/!\ size expressed in some defined unit, or accept characters 'K/M/G' for units ?
+	\ set and configure routes
+		~ define route prepended to a certain requested path : `location path {root prepend}` -> true path is prepend/path
+		~ define accepted HTTP methods for a route : `limit_except method` inside location
+		~ define HTTP redirect (code 301) : `location oldpath {return 301 newpath}`
+	\ enable|disable directory listing : `autoindex on|off` inside location
+	\ define a default file to serve when request ends in '/' : `index filename` in location
+	\ define file extensions for which CGI should be executed, for POST and GET : custom
+	\ allow uploading files with POST/PUT methods, define storage location : custom
+- parsing des requetes GET/POST/DELETE
+
+- handle multiple "virtual" servers :
+	\ by parsing cfg file, we have a set of ports+address on which to read
+	  and a representation of all "virtual" servers by a list of structs (?)
+	\ we setup a main socket FOR EACH different IPaddress+port ;
+	  when it receives incoming connection we PEEK (not removing request content from reading queue)
+	  into the request to determine to which "virtual" server the request is directed,
+	  	according to the port+address of reception and the domain name of request
+	\ each ClientHandler instance has the index of its "virtual" server,
+		so events from dedicated sockets (ie. from clients already connected)
+		are directed to the "virtual" server of their ClientHandler, no need of further checks
+- processing of GET requests according to URI :
+	\ if ending without a '/' <=> a file with a file extension, serve the resource if it exists
+		/!\ redirections / index files defined in conf file may cause a recurrence on another resource URI
+	\ if ending with a '/' <=> a directory : search for an 'index.html' file at this location
+		if there is none and autoindex option is set generate the index, otherwise return 404
+
+
+
+- faire quelques tests avec nginx pour voir le contenu des headers
+- tests avec Firefox/curl/nc + eventuellement un script de test
 - essayer d'utiliser wireshark
-- verifier comment catch les signaux pour toujours shutdown le serveur proprement
 
 */

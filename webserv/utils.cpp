@@ -1,4 +1,4 @@
-#include "Server.hpp"
+#include "webserv.hpp"
 
 int	logError(std::string msg, bool displayErrno)
 {

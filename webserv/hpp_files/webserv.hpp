@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   webserv.hpp                                        :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: administyrateur <administyrateur@studen    +#+  +:+       +#+        */
+/*   By: abedin <abedin@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/28 15:19:26 by ilevy             #+#    #+#             */
-/*   Updated: 2025/05/02 16:09:16 by administyra      ###   ########.fr       */
+/*   Updated: 2025/05/06 15:51:31 by abedin           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,6 +15,10 @@
 #ifndef WEBSERV_HPP
 # define WEBSERV_HPP
 
+// Libraries
+# include "libraryUsed.hpp"
+
+// Global variable for logs
 extern int	LOGSV;
 // Global variable for communication of signal SIGINT
 extern volatile int	g_global_signal;
@@ -28,17 +32,27 @@ extern volatile int	g_global_signal;
 class	Server;
 class	Client;
 class	Request;
+class	Response;
 typedef struct s_vserver t_vserver;
 typedef struct s_location t_location;
 typedef struct s_mainSocket t_mainSocket;
+typedef std::pair<uint32_t, uint16_t> t_portaddr; // an IP address (int) + a port number (short)
 
-# include "libraryUsed.hpp"
-# include "Request.hpp"
+// Other headers
 # include "Client.hpp"
 # include "Server.hpp"
+# include "Request.hpp"
+# include "Response.hpp"
 # include "cfgParsing.hpp"
+# include "utilsTemplates.tpp"
 
 // Misc functions
-int	logError(std::string msg, bool displayErrno);
+int			logError(std::string msg, bool displayErrno);
+void		logTime(int linebreak);
+void		trimString(std::string& s);
+int			splitString(std::string& orig, std::vector<std::string>& tokens, std::string seps);
+bool 		ends_with(const std::string& str, const std::string& suffix);
+// Template functions
+template <class T>	std::string	itostr(T number);
 
 #endif

@@ -3,25 +3,27 @@
 #                                                         :::      ::::::::    #
 #    Makefile                                           :+:      :+:    :+:    #
 #                                                     +:+ +:+         +:+      #
-#    By: administyrateur <administyrateur@studen    +#+  +:+       +#+         #
+#    By: abedin <abedin@student.42.fr>              +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2025/04/26 15:17:49 by ilevy             #+#    #+#              #
-#    Updated: 2025/05/02 16:11:41 by administyra      ###   ########.fr        #
+#    Updated: 2025/05/06 15:51:46 by abedin           ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
 NAME = webserv
 
 SRCS_FOLDER = cpp_files/
-SRCS_OBJECTS = 	utils.cpp main.cpp \
+SRCS_OBJECTS = 	utils1.cpp utils2.cpp \
+				main.cpp \
 				Client.cpp Server.cpp \
-				Request.cpp cfgParsing.cpp
+				Request.cpp Response.cpp \
+				cfgParsing.cpp
 SRCS = $(addprefix $(SRCS_FOLDER), $(SRCS_OBJECTS))
 OBJS = $(addprefix $(OBJ_DIR), $(SRCS_OBJECTS:.cpp=.o))
 OBJ_DIR = o_files/
 INCLUDE = hpp_files/
 
-CFLAGS = -Wall -Wextra -Werror
+CFLAGS = -Wall -Wextra -Werror -std=c++98
 CC = clang++
 
 all: $(NAME)

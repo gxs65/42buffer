@@ -1,55 +1,8 @@
 #include "../hpp_files/webserv.hpp"
 
-std::ostream& operator<<(std::ostream& out, const std::pair<uint32_t, uint16_t>& portaddr);
-
-int	parseBlock(std::ifstream& inStream, std::string blockName,
-	void* storage, int (*lineParser)(std::string&, std::ifstream&, void*));
-
-/////////////////////////
-// STRING MANIPULATION //
-/////////////////////////
-
-// Trims a string, ie. removes all space characters on the left and right
-void	trimString(std::string& s)
-{
-	unsigned int	ind;
-
-	ind = 0;
-	while (ind < s.size() && std::isspace(s[ind]))
-		ind++;
-	if (ind > 0)
-		s.erase(0, ind);
-	if (s.size() == 0)
-		return ;
-	ind = s.size() - 1;
-	while (ind >= 0 && std::isspace(s[ind]))
-		ind--;
-	if (ind < s.size() - 1)
-		s.erase(ind + 1, s.size() - ind);
-}
-
-// Splits strings <orig> by separators in <seps>
-// and puts the resulting tokens in vector <tokens>
-int	splitString(std::string& orig, std::vector<std::string>& tokens, std::string seps)
-{
-	unsigned int	ind = 0;
-	unsigned int	indLast = 0;
-
-	while (ind < orig.size())
-	{
-		while (ind < orig.size() && seps.find(orig[ind]) == std::string::npos)
-			ind++;
-		if (ind != indLast)
-			tokens.push_back(orig.substr(indLast, ind - indLast));
-		ind++;
-		indLast = ind;
-	}
-	return (0);
-}
-
-////////////
-// CHECKS //
-////////////
+///////////////////////
+// CHECKS ON STRINGS //
+///////////////////////
 
 // Checks that a string contains a valid unsigned integer literal
 // (<=> characters are only digits 1-9)
@@ -87,17 +40,37 @@ int	invalidReturnCode(std::string& codeLit)
 	return (1);
 }
 
+// Checks that the next line in the file is opening a block
+// <=> is exactly '{' (once trimmed) 
+bool	blockOpened(std::ifstream& inStream, std::string& blockName)
+{
+	std::string	line;
+
+	(void)blockName;
+	std::getline(inStream, line);
+	trimString(line);
+	//std::cout << blockName << " Line : --" << line << "--\n";
+	if (line.compare("{") == 0)
+		return (1);
+	else
+		return (0);
+}
+
+/////////////////////////
+// CHECKS ON PORTADDRS //
+/////////////////////////
+
 // Checks if <portaddrB> is redundant with <portAddrA> (<portaddrA> "contains" <portaddrB>)
 // 		<=> if listening on <portaddrB> is useless when already listening on <portaddrA>
 // /!\ not symmetrical : checks if A contains B, not if B contains A
-int	portaddrContains(const std::pair<uint32_t, uint16_t>& portaddrA,
-	const std::pair<uint32_t, uint16_t>& portaddrB)
+int	portaddrContains(const t_portaddr& portaddrA,
+	const t_portaddr& portaddrB)
 {
-	if (portaddrA.second == portaddrB.second) // same port
+	if (portaddrA.second == portaddrB.second) // same port and ...
 	{
-		if (portaddrA.first == portaddrB.first) // same interface IP
+		if (portaddrA.first == portaddrB.first) // ... either same interface IP
 			return (1);
-		if (portaddrA.first == INADDR_ANY) // portaddrA is on any interface
+		if (portaddrA.first == INADDR_ANY) // ... or portaddrA is on any interface
 			return (1);
 	}
 	return (0);
@@ -108,22 +81,22 @@ int	portaddrContains(const std::pair<uint32_t, uint16_t>& portaddrA,
 // 		  is already in the list -> no need to insert
 // 		\ a portaddr that is contained by the new one is already in the list
 // 		  -> the new one should replace the old one
-void	addPortaddrToVserv(t_vserver& vs, std::pair<uint32_t, uint16_t>& portaddr)
+void	addPortaddrToVserv(t_vserver& vs, t_portaddr& portaddr)
 {
-	std::set<std::pair<uint32_t, uint16_t> >::iterator	it;
+	std::set<t_portaddr >::iterator	it;
 
 	for (it = vs.portaddrs.begin(); it != vs.portaddrs.end(); it++)
 	{
 		if (portaddrContains(*it, portaddr))
 		{
-			std::cout << "[serv] portaddr " << portaddr
-				<< " not added to vserv because contained by " << *it << "\n";
+			//std::cout << "[serv] portaddr " << portaddr
+			//	<< " not added to vserv because contained by " << *it << "\n";
 			return ;
 		}
 		else if (portaddrContains(portaddr, *it))
 		{
-			std::cout << "[serv] portaddr " << portaddr
-				<< "contains and replaces in vserv former portaddr " << *it << "\n";
+			//std::cout << "[serv] portaddr " << portaddr
+			//	<< "contains and replaces in vserv former portaddr " << *it << "\n";
 			vs.portaddrs.erase(it);
 			vs.portaddrs.insert(portaddr);
 			return ;
@@ -132,26 +105,12 @@ void	addPortaddrToVserv(t_vserver& vs, std::pair<uint32_t, uint16_t>& portaddr)
 	vs.portaddrs.insert(portaddr);
 }
 
-// Checks that the next line in the file is opening a block
-// <=> is exactly '{' (once trimmed) 
-bool	blockOpened(std::ifstream& inStream, std::string& blockName)
-{
-	std::string	line;
-
-	std::getline(inStream, line);
-	trimString(line);
-	std::cout << blockName << " Line : --" << line << "--\n";
-	if (line.compare("{") == 0)
-		return (1);
-	else
-		return (0);
-}
-
 ///////////////////////////////////////
 // STRUCTURES INITIALIZATION AND LOG //
 ///////////////////////////////////////
 
-std::ostream&	operator<<(std::ostream& out, const std::pair<uint32_t, uint16_t>& portaddr)
+// Display overload for portaddr type
+std::ostream&	operator<<(std::ostream& out, const t_portaddr& portaddr)
 {
 	in_addr	address;
 
@@ -160,32 +119,54 @@ std::ostream&	operator<<(std::ostream& out, const std::pair<uint32_t, uint16_t>&
 	return (out);
 }
 
+// Display overload for virtual server (only displays 1 server name)
+std::ostream&	operator<<(std::ostream& out, const t_vserver* vserv)
+{
+	if (vserv)
+		out << "[" << *(vserv->serverNames.begin()) << "]";
+	else
+		out << "NULL";
+	return (out);
+}
+
+// Display overload for location (only displays locationPath)
+std::ostream&	operator<<(std::ostream& out, const t_location* location)
+{
+	if (location)
+		out << "[" << location->locationPath << "]";
+	else
+		out << "NULL";
+	return (out);
+}
+
 // Logs the parameters for 1 location in a virtual server
 void	logLocation(t_location& l)
 {
-	std::set<std::string>::iterator					it1;
-	std::map<std::string, std::string>::iterator	it2;
+	std::set<std::string>::iterator		it1;
+	std::vector<std::string>::iterator	it2;
 
 	std::cout << "\tLOCATION\n";
 	std::cout << "\t\tlocationPath : " << l.locationPath
 		<< "\n\t\tredirection : " << l.redirection
 		<< "\n\t\trootPath : " << l.rootPath
+		<< "\n\t\taliasPath : " << l.aliasPath
 		<< "\n\t\tuploadPath : " << l.uploadPath
 		<< "\n\t\tdefaultFileWhenDir : " << l.defaultFileWhenDir
 		<< "\n\t\tautoindex : " << l.autoIndex << "\n";
 	std::cout << "\t\taccepted methods : ";
 	for (it1 = l.acceptedMethods.begin(); it1 != l.acceptedMethods.end(); it1++)
 		std::cout << *it1 << " ";
-	std::cout << "\n\t\tcgis :\n";
+	std::cout << "\n\t\tcgis : { ";
 	for (it2 = l.cgiExtensions.begin(); it2 != l.cgiExtensions.end(); it2++)
-		std::cout << "\t\t\t" << (*it2).first << " : " << (*it2).second << "\n";
+		std::cout << *it2 << " ";
+	std::cout << "}\n";
 }
 
 // Logs the parameters for 1 virtual server
 void	logVserver(t_vserver& vs, unsigned int vservInd)
 {
 	unsigned int										ind;
-	std::set<std::pair<uint32_t, uint16_t> >::iterator	it0;
+	std::set<t_portaddr >::iterator	it0;
 	std::set<std::string>::iterator						it1;
 	std::map<int, std::string>::iterator				it2;
 
@@ -203,6 +184,7 @@ void	logVserver(t_vserver& vs, unsigned int vservInd)
 	std::cout << "locations :\n";
 	for (ind = 0; ind < vs.locations.size(); ind++)
 		logLocation(vs.locations[ind]);
+	std::cout << "rootPath : " << vs.rootPath << "\n";
 }
 
 // Logs all the virtual servers resulting from the configuration
@@ -210,10 +192,10 @@ void	logWebservConf(std::vector<t_vserver> vservers)
 {
 	unsigned int	ind;
 
-	std::cout << "===== VIRTUAL SERVERS OF CURRENT WEBSERV CFG\n";
+	std::cout << "<<< VIRTUAL SERVERS OF CURRENT WEBSERV CFG\n";
 	for (ind = 0; ind < vservers.size(); ind++)
 		logVserver(vservers[ind], ind);
-	std::cout << "=====\n";
+	std::cout << ">>>\n";
 }
 
 // Sets default values for 1 location in a virtual server :
@@ -223,6 +205,7 @@ void	initLocation(t_location& l)
 	l.locationPath = "";
 	l.redirection = "";
 	l.rootPath = "";
+	l.aliasPath = "";
 	l.uploadPath = "";
 	l.defaultFileWhenDir = "";
 	l.autoIndex = 0;
@@ -237,6 +220,7 @@ void	initVserver(t_vserver& vs)
 {
 	vs.listenSet = 0;
 	vs.maxRequestBodySize = std::numeric_limits<long>::max();
+	vs.rootPath = "";
 }
 
 /////////////////////
@@ -246,15 +230,18 @@ void	initVserver(t_vserver& vs)
 // Checks if there are incompatibilities in a location block
 // 		\ if there is a redirection, there can't be anything else
 // 		\ if there is a default index file, autoindex can't be 1
+// 		\ if there is a rootPath, there can't be an aliasPath
 int	invalidLocationParams(t_location& l)
 {
 	if (l.redirection.size() > 0
-		&& (l.rootPath.size() > 0 || l.uploadPath.size() > 0
+		&& (l.rootPath.size() > 0 || l.aliasPath.size() > 0 || l.uploadPath.size() > 0
 			|| l.defaultFileWhenDir.size() > 0 || l.autoIndexSet
 			|| l.cgiExtensions.size() > 0 || l.acceptedMethodsSet))
 		return (logError("[loca] redirection with other parameters is invalid\n", 0));
 	if (l.autoIndex && l.defaultFileWhenDir.size() > 0)
 		return (logError("[loca] autoindex ON while default file set is invalid\n", 0));
+	if (l.aliasPath.size() > 0 && l.rootPath.size() > 0)
+		return (logError("[loca] root path and alias path both defined\n", 0));
 	return (0);
 }
 
@@ -282,6 +269,12 @@ int parseLineLocation(std::string& line, std::ifstream& inStream, void* storage)
 		if (tokens.size() != 2 || location->rootPath.size() != 0)
 			return (logError("[loca] invalid 'root' directive\n", 0));
 		location->rootPath = tokens[1];
+	}
+	else if (tokens[0].compare("alias") == 0)
+	{
+		if (tokens.size() != 2 || location->aliasPath.size() != 0)
+			return (logError("[loca] invalid 'alias' directive\n", 0));
+		location->aliasPath = tokens[1];
 	}
 	else if (tokens[0].compare("upload") == 0)
 	{
@@ -322,9 +315,14 @@ int parseLineLocation(std::string& line, std::ifstream& inStream, void* storage)
 	}
 	else if (tokens[0].compare("cgi") == 0)
 	{
-		if (tokens.size() != 3 || tokens[1][0] != '.')
+		if (tokens.size() < 2 || location->cgiExtensions.size() > 0)
 			return (logError("[loca] invalid 'cgi' directive\n", 0));
-		location->cgiExtensions.insert(std::pair<std::string, std::string>(tokens[1], tokens[2]));
+		for (ind = 1; ind < tokens.size(); ind++)
+		{
+			if (tokens[ind].size() < 2 || tokens[ind][0] != '.')
+				return (logError("[loca] invalid value for 'cgi' directive\n", 0));
+			location->cgiExtensions.push_back(tokens[ind]);
+		}
 	}
 	else
 		return (logError("[loca] unrecognized directive", 0));
@@ -367,7 +365,7 @@ int parseLineServ(std::string& line, std::ifstream& inStream, void* storage)
 	std::vector<std::string>			tokensListen;
 	int									returnCode;
 	in_addr								translatedIPAddress;
-	std::pair<uint32_t, uint16_t> 		portaddr;
+	t_portaddr 		portaddr;
 
 	vserv = reinterpret_cast<t_vserver*>(storage);
 	splitString(line, tokens, " \t");
@@ -430,6 +428,12 @@ int parseLineServ(std::string& line, std::ifstream& inStream, void* storage)
 		for (ind = 1; ind < tokens.size(); ind++)
 			vserv->serverNames.insert(tokens[ind]);
 	}
+	else if (tokens[0].compare("root") == 0)
+	{
+		if (tokens.size() != 2 || vserv->rootPath.size() != 0)
+			return (logError("[serv] invalid 'root' directive", 0));
+		vserv->rootPath = tokens[1];
+	}
 	else
 		return (logError("[serv] unrecognized directive", 0));
 	return (0);
@@ -452,7 +456,7 @@ int parseLineHttp(std::string& line, std::ifstream& inStream, void* storage)
 		if (parseBlock(inStream, "[serv]", &vserv, &parseLineServ))
 			return (1);
 		if (vserv.listenSet == 0)
-			vserv.portaddrs.insert(std::pair<uint32_t, uint16_t>(INADDR_ANY, 80));
+			vserv.portaddrs.insert(t_portaddr(INADDR_ANY, 80));
 		if (invalidVserverParameters(vserv))
 			return (1);
 		vservers->push_back(vserv);
@@ -487,7 +491,7 @@ int	parseBlock(std::ifstream& inStream, std::string blockName,
 	while (inBlock && std::getline(inStream, line))
 	{
 		trimString(line);
-		std::cout << blockName + " Line : --" << line << "--\n";
+		//std::cout << blockName + " Line : --" << line << "--\n";
 		if (line.size() == 0)
 			continue;
 		if (line.compare("}") == 0)
@@ -524,7 +528,7 @@ int	parseCfgFile(std::string& cfgFileName, std::vector<t_vserver>& vservers)
 	struct stat				fileInfos;
 	std::string				line;
 
-	std::cout << "===== PARSING CONFIG FILE " << cfgFileName << "\n";
+	std::cout << "<<< PARSING CONFIG FILE " << cfgFileName << "\n";
 	if (stat(cfgFileName.c_str(), &fileInfos) != 0 || !(fileInfos.st_mode & S_IFREG))
 		return (logError("Config file not found or invalid", 0));
 	inStream.open(cfgFileName.c_str());
@@ -533,7 +537,7 @@ int	parseCfgFile(std::string& cfgFileName, std::vector<t_vserver>& vservers)
 	while (std::getline(inStream, line))
 	{
 		trimString(line);
-		std::cout << "[base] Line : --" << line << "--\n";
+		//std::cout << "[base] Line : --" << line << "--\n";
 		if (line.size() == 0)
 			continue;
 		if (line.compare("http") == 0)
@@ -544,8 +548,7 @@ int	parseCfgFile(std::string& cfgFileName, std::vector<t_vserver>& vservers)
 		else
 			return (logError("[base] unrecognized directive", 0));
 	}
-	std::cout << "=====\n";
-	//logWebservConf(vservers);
+	std::cout << ">>>\n";
 	inStream.close();
 	return (0);
 }

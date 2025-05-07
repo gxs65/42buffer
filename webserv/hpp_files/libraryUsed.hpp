@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   libraryUsed.hpp                                    :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: administyrateur <administyrateur@studen    +#+  +:+       +#+        */
+/*   By: abedin <abedin@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/30 15:49:54 by ilevy             #+#    #+#             */
-/*   Updated: 2025/05/02 16:06:29 by administyra      ###   ########.fr       */
+/*   Updated: 2025/05/06 16:05:33 by abedin           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -19,19 +19,29 @@
 # include <cctype>
 # include <string>
 # include <iostream>
+# include <sstream>
 # include <stdlib.h>
+# include <string.h>
 # include <strings.h>
 # include <unistd.h>
-# include <limits>
 # include <errno.h>
+# include <limits>
+# include <limits.h>
+
+// Containers
 # include <vector>
 # include <map>
 # include <stack>
 # include <set>
+
+// Files and processes control
 # include <fstream>
 # include <fcntl.h>
+# include <wait.h>
+# include <sys/types.h>
 # include <sys/stat.h>
 # include <csignal>
+# include <ctime>
 
 // Sockets modules
 # include <sys/socket.h>

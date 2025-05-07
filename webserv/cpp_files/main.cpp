@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   main.cpp                                           :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: administyrateur <administyrateur@studen    +#+  +:+       +#+        */
+/*   By: abedin <abedin@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/28 15:09:46 by ilevy             #+#    #+#             */
-/*   Updated: 2025/05/03 18:48:40 by administyra      ###   ########.fr       */
+/*   Updated: 2025/05/07 15:51:20 by abedin           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,6 +15,8 @@
 int 			LOGSV = 1;
 volatile int	g_global_signal;
 
+// Modifies the global communication variable to indicate that a SIGINT was received
+// to allow the <Server> instance to exit gracefully
 void	handleSigint(int sigNum)
 {
 	if (sigNum == SIGINT)
@@ -28,8 +30,9 @@ int	main(int ac, char **av)
 	g_global_signal = 0;
 	std::signal(SIGINT, &handleSigint);
 
-	
-	Server		serv("webserv.conf");
+	Server		serv;
+	if (serv.initServer("webserv.conf")) // #f : make this an argument of the program
+		return (1);
 	if (serv.startServer())
 		return (1);
 	if (serv.serverLoop())
@@ -98,27 +101,16 @@ int	main(int ac, char **av)
 // CODE STRUCTURE //
 ////////////////////
 
-+ build true server loop with <poll>
-+ test some <write> in a socket (see results with curl/nc)
-+ catch signals to shutdown server cleanly (close all sockets and return)
-- parsing of config file (always define a default when a directive is absent)
-	\ set port and name of each (virtual) server : `listen address:port`, `server_name name`
-		/!\ server name can be an IP
-	\ set default error pages : `error_page errcode page_uri`
-	\ set maximum allowed size for client request bodies : `client_max_body_size size`
-		/!\ size expressed in some defined unit, or accept characters 'K/M/G' for units ?
-	\ set and configure routes
-		~ define route prepended to a certain requested path : `location path {root prepend}` -> true path is prepend/path
-		~ define accepted HTTP methods for a route : `limit_except method` inside location
-		~ define HTTP redirect (code 301) : `location oldpath {return 301 newpath}`
-	\ enable|disable directory listing : `autoindex on|off` inside location
-	\ define a default file to serve when request ends in '/' : `index filename` in location
-	\ define file extensions for which CGI should be executed, for POST and GET : custom
-	\ allow uploading files with POST/PUT methods, define storage location : custom
-- parsing des requetes GET/POST/DELETE
-- handling of CGIs
-- correct handling of errors (cleaning/closing sockets when necessary)
-	notably POLLERR or a read failure on a dedicated socket : should close this socket only, not whole server
+- role of each class :
+	\ Server : reads the config file to create (and manage, using function <poll> and instances of Client)
+		the main sockets listening for new connections and the dedicated sockets communicating with a client
+	\ Client : reacts to the POLLIN (POLLOUT) events received on a dedicated socket
+		by reading (writing) into the socket and creating the instances of Request/Response for each request
+	\ Request : parses a HTTP request, and does nothing else (therefore, it has no refs to vservers list)
+	\ Response : generates the response to a given instance of Request, by
+		~ identifying at which location of which virtual server the Request is directed
+		~ searching this device's arborescence for files / executing CGI scripts
+		~ creating the HTTP response (status code, headers, body)
 
 - handle multiple "virtual" servers :
 	\ by parsing cfg file, we have a set of ports+address on which to read
@@ -168,11 +160,41 @@ int	main(int ac, char **av)
 // TODO //
 //////////
 
++ build true server loop with <poll>
++ test some <write> in a socket (see results with curl/nc)
++ catch signals to shutdown server cleanly (close all sockets and return)
++ parsing of config file (always define a default when a directive is absent)
+	\ set port and name of each (virtual) server : `listen address:port`, `server_name name`
+		/!\ server name can be an IP
+	\ set default error pages : `error_page errcode page_uri`
+	\ set maximum allowed size for client request bodies : `client_max_body_size size`
+		/!\ size expressed in some defined unit, or accept characters 'K/M/G' for units ?
+	\ set and configure routes
+		~ define route prepended to a certain requested path : `location path {root prepend}` -> true path is prepend/path
+		~ define accepted HTTP methods for a route : `limit_except method` inside location
+		~ define HTTP redirect (code 301) : `location oldpath {return 301 newpath}`
+	\ enable|disable directory listing : `autoindex on|off` inside location
+	\ define a default file to serve when request ends in '/' : `index filename` in location
+	\ define file extensions for which CGI should be executed, for POST and GET : custom
+	\ allow uploading files with POST/PUT methods, define storage location : custom
+- parsing of requests GET/POST/DELETE
+- handling of CGIs
+- correct handling of errors (cleaning/closing sockets when necessary)
+	\ POLLERR or a read failure on a dedicated socket : should close this socket only, not whole server
+	\ all cases where a HTTP request (or response generated by CGI) is wrongly formatted
+	\ all cases where config file has errors (eg. 0 virtual servers defined)
+- handle chunked requests and responses, limit max request size, handle non-text files as entry
+
 - tests
 	\ faire quelques tests avec nginx pour voir le contenu des headers
 	\ tests avec Firefox/curl/nc + eventuellement un script de test
 	\ essayer d'utiliser wireshark
-- remplacer les pair<int,short> par un type portaddr, avec un typedef
++ remplacer les pair<int,short> par un type portaddr, avec un typedef
+- verifier que le vserver selectionne par defaut est bien le premier vserver de la liste
+	(depend du choix de container vector/set dans le t_mainSocket)
+- en local a 42, utiliser le nom du poste a la place de localhost pour simuler un nom de serveur
+- lire le salon webserv pour des tests de charge
+- verifier les autorisations sur les fonctions de C et C++ (malloc, free, strdup, bzero...)
 
 - verifications sur la gestion des connexions avec le client :
 	\ conditions de fin de requête = "\r\n\r\n" et pas de content length,
@@ -185,4 +207,10 @@ int	main(int ac, char **av)
 				(on reviendra au traitement de la prochaine requête quand on aura envoyé la réponse à la première)
 		/!\ implémentation ressemblera un peu à la démarche de gnl de check s'il y a un '\n' dans le remainder
 			avant de read à nouveau BUFFER_SIZE caractères (sauf que notre condition de fin de requête est plus complexe que '\n')
+
+
+- questionnements :
+	\ definition des cas ou le serveur s'arrete, eg. faut-il s'arreter quand un script CGI plante ?
+	\ doit-on gerer les cas ou le CGI produit un fichier non-texte ?
+		(dans ce cas il y a un melange dans son output entre les headers qu'il est cense creer et le contenu non-texte)
 */

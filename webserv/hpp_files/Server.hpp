@@ -2,37 +2,39 @@
 # define SERVER_H
 
 # include "webserv.hpp"
-
 # define MAX_QUEUED_CONNECTIONS 10
 
-typedef struct s_mainSocket t_mainSocket;
-
+// Reads a config file to create a list of main sockets that will listen on portaddrs,
+// and handles through instances of <Client> the dedicated sockets that will be created
+// for clients that connected to the main sockets
+// 	-> in <serverLoop>, all sockets are searched repeatedly for IO events using function <poll>
 class	Server
 {
 	public:
-		Server(std::string cfgFileName);
+		Server();
 		~Server();
-		int			startServer(void);
-		int			serverLoop(void);
-		void		stopServer(void);
+		int			initServer(std::string cfgFileName);
+		int			startServer();
+		int			serverLoop();
+		void		stopServer();
 
 	private:
 		std::vector<t_vserver>		_vservers;
 		std::vector<t_mainSocket>	_mainSockets;
 		std::vector<Client*>		_clientHandlers;
 		// Initialization
-		void		initMainSockets(void);
-		void		addPortaddrToWebserv(const std::pair<uint32_t, uint16_t>& portaddr, unsigned int vservInd);
-		void		logMainSockets(void);
+		void						initMainSockets();
+		void						addPortaddrToWebserv(const t_portaddr& portaddr, unsigned int vservInd);
+		void						logMainSockets();
 		// Mainloop
-		int			openMainSocket(t_mainSocket& ms);
-		int			goThroughEvents(struct pollfd* pfds, unsigned int nfds);
-		int			handleNewConnection(unsigned int mainSocketInd);
-		int			handleOldConnection(unsigned int clientInd, struct pollfd& pfd);
+		int							openMainSocket(t_mainSocket& ms);
+		int							goThroughEvents(struct pollfd* pfds, unsigned int nfds);
+		int							handleNewConnection(unsigned int mainSocketInd);
+		int							handleOldConnection(unsigned int clientInd, struct pollfd& pfd);
 		// Utils
-		void			removeClosedConnections(void);
-		unsigned int	createPollFds(struct pollfd **pfds);
-		void			displayEvents(short revents);
+		void						removeClosedConnections();
+		unsigned int				createPollFds(struct pollfd **pfds);
+		void						displayEvents(short revents);
 };
 
 // Stores information about a main socket of Webserv :
@@ -42,9 +44,9 @@ class	Server
 // 						 which listen on this portaddr, and so may have to handle requests received here
 struct s_mainSocket
 {
-	int								fd;
-	std::pair<uint32_t, uint16_t>	portaddr;
-	std::set<int>					vservIndexes;
+	int					fd;
+	t_portaddr			portaddr;
+	std::set<int>		vservIndexes;
 };
 
 #endif

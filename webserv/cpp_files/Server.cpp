@@ -4,14 +4,22 @@
 // CANONICAL ORTHODOX FORM //
 /////////////////////////////
 
-// Initializes the server internal variables as defined in configuration file
-Server::Server(std::string cfgFileName)
+Server::Server()
 {
-	std::cout << "Parameter constructor for Server\n";
-	parseCfgFile(cfgFileName, this->_vservers);
+	std::cout << "Parameter constructor for Server\n\n";
+}
+
+// Initializes the server internal variables as defined in configuration file,
+// then determines which main sockets will have to be maintained
+// 		/!\ structures representing main sockets are built, but no real socket is created
+int		Server::initServer(std::string cfgFileName)
+{
+	if (parseCfgFile(cfgFileName, this->_vservers))
+		return (1);
 	logWebservConf(this->_vservers);
 	this->initMainSockets();
 	this->logMainSockets();
+	return (0);
 }
 
 Server::~Server(void)
@@ -33,7 +41,7 @@ void	Server::logMainSockets(void)
 	std::vector<t_mainSocket>::iterator			msIt;
 	std::set<int>::iterator						indsIt;
 
-	std::cout << "===== MAIN SOCKETS\n";
+	std::cout << "<<< MAIN SOCKETS\n";
 	for (msIt = this->_mainSockets.begin(); msIt != this->_mainSockets.end(); msIt++)
 	{
 		std::cout << "Main socket fd " << msIt->fd << ", portaddr " << msIt->portaddr
@@ -42,7 +50,7 @@ void	Server::logMainSockets(void)
 			std::cout << *indsIt << " ";
 		std::cout << "}\n";
 	}
-	std::cout << "=====\n";
+	std::cout << ">>>\n\n";
 }
 
 // Ensures that the server has a main socket listening to <portaddr>
@@ -51,8 +59,7 @@ void	Server::logMainSockets(void)
 // 			-> <vservInd> is simply added to the list of virtual servers for which this socket listens
 // 		\ there is no main socket listening to <portaddr>
 // 			-> a main socket is created with only <vservInd> (for now) in its list
-void	Server::addPortaddrToWebserv(const std::pair<uint32_t, uint16_t>& portaddr,
-	unsigned int vservInd)
+void	Server::addPortaddrToWebserv(const t_portaddr& portaddr, unsigned int vservInd)
 {
 	t_mainSocket								ms;
 	std::vector<t_mainSocket>::iterator			mainSocketIt;
@@ -77,7 +84,7 @@ void	Server::addPortaddrToWebserv(const std::pair<uint32_t, uint16_t>& portaddr,
 // 		\ first for portaddrs where the interface IP is "INADDR_ANY" (<=> any IP)
 // 		\ second for portaddrs where the interface IP is a specific IP
 // (this order avoids creating a <t_mainSocket> for a specific port and specific IP,
-// 	then having to replace it because another virtual server listens on the same port and any IP)
+// 	then having to replace it because another virtual server listens on the same port but on any IP)
 // Thus if 2 virtual servers listen on the same portaddr,
 // only one <t_mainSocket> is created that listens to that portaddr for both virtual servers
 // 		-> each <t_mainSocket> struct has a list of the indexes of virtual servers
@@ -86,11 +93,11 @@ void	Server::addPortaddrToWebserv(const std::pair<uint32_t, uint16_t>& portaddr,
 // 		   is done after request parsing, using the virtual servers' names)
 void	Server::initMainSockets(void)
 {
-	unsigned int										vservInd;
-	t_vserver*											vserv;
-	std::set<std::pair<uint32_t, uint16_t> >::iterator	portaddrIt;
+	unsigned int						vservInd;
+	t_vserver*							vserv;
+	std::set<t_portaddr >::iterator		portaddrIt;
 
-	for (vservInd = 0; vservInd < this->_vservers.size(); vservInd++)
+	for (vservInd = 0; vservInd < this->_vservers.size(); vservInd++) // loop for portaddrs with 'any IP'
 	{
 		vserv = &(this->_vservers[vservInd]);
 		for (portaddrIt = (*vserv).portaddrs.begin(); portaddrIt != (*vserv).portaddrs.end(); portaddrIt++)
@@ -99,7 +106,7 @@ void	Server::initMainSockets(void)
 				this->addPortaddrToWebserv(*portaddrIt, vservInd);
 		}
 	}
-	for (vservInd = 0; vservInd < this->_vservers.size(); vservInd++)
+	for (vservInd = 0; vservInd < this->_vservers.size(); vservInd++) // loop for portaddrs with 'specific IP'
 	{
 		vserv = &(this->_vservers[vservInd]);
 		for (portaddrIt = (*vserv).portaddrs.begin(); portaddrIt != (*vserv).portaddrs.end(); portaddrIt++)
@@ -109,7 +116,6 @@ void	Server::initMainSockets(void)
 		}
 	}
 }
-
 
 /////////////////////
 // STARTING SERVER //
@@ -155,7 +161,7 @@ int		Server::openMainSocket(t_mainSocket& ms)
 	ms.fd = socket(AF_INET, SOCK_STREAM, 0);
 	if (ms.fd < 0)
 		return (logError("[startServer] error when creating socket", 1));
-	std::cout << "[startServer]\tsocket created with fd " << ms.fd << "\n";
+	std::cout << "\tsocket created with fd " << ms.fd << "\n";
 
 	setsockopt(ms.fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddrOptionValue, sizeof(reuseaddrOptionValue));
 	socketAddress.sin_family = AF_INET;
@@ -163,13 +169,13 @@ int		Server::openMainSocket(t_mainSocket& ms)
 	socketAddress.sin_addr.s_addr = htonl(ms.portaddr.first);
 	if (bind(ms.fd, reinterpret_cast<sockaddr*>(&socketAddress), sizeof(socketAddress)) < 0)
 		return (logError("[startServer] error when binding socket to address", 1));
-	std::cout << "[startServer]\tsocket bound "
+	std::cout << "\tsocket bound "
 		<< "(IP " << inet_ntoa(socketAddress.sin_addr)
 		<< ", port : " << ms.portaddr.second << ")\n";
 
 	if (listen(ms.fd, MAX_QUEUED_CONNECTIONS) < 0)
 		return (logError("[startServer] error when passing socket into 'listen' mode", 1));
-	std::cout << "[startServer]\tsocket passed into 'listen' mode\n";
+	std::cout << "\tsocket passed into 'listen' mode\n";
 	return (0);
 }
 
@@ -205,6 +211,9 @@ void	Server::stopServer(void)
 // 		\ call function <poll> to fill the array with, for each socket, the events it encountered
 // 			-> POLLIN for "received data that is ready for reading",
 // 			   POLLOUT for "ready to send the server response to the client")
+// 			/!\ <poll> called without duration, so it will wait indefinitely
+// 				until either an event does occur on a socket, or the program receives a signal
+// 		\ (check if <poll> returned because the program received SIGINT, if so the program must exit)
 // 		\ call <goThroughEvents> to go through the array to manage occurring events
 // 			~ on dedicated sockets : transmit event to corresponding <ClientHandler> instance
 // 			~ on main sockets : call <accept> to accept connection from a new client
@@ -222,27 +231,26 @@ int		Server::serverLoop(void)
 	unsigned int	nfds;
 	int				nfdsReady;
 
-	std::cout << "Entering server mainloop\n";
+	
+	std::cout << "\n\033[35mEntering server mainloop\033[0m\n";
 	while (1)
 	{
-		std::cout << "------------\n";
+		std::cout << "\n<<< LOOP CYCLE AT ";
+		logTime(1);
 		nfds = this->createPollFds(&pfds);
-		std::cout << "Poll structures list created, calling <poll>\n";
-		nfdsReady = poll(pfds, nfds, 2000); // #f : may need a longer duration
-		if (g_global_signal) // in case of interruption by SIGINT, exit must be clean
-		{
-			delete[] pfds;
-			this->stopServer();
-			return (0);
-		}
+		nfdsReady = poll(pfds, nfds, -1);
+		if (g_global_signal) // in case of interruption by SIGINT during poll
+			return (delete[] pfds, this->stopServer(), 0);
 		if (nfdsReady == -1)
 			return (logError("[serverLoop] error during poll", 1));
 		std::cout << "Number of sockets ready for I/O : " << nfdsReady << "\n";
 		if (nfdsReady > 0 && this->goThroughEvents(pfds, nfds))
 			return (1);
+		if (g_global_signal) // in case of interruption by SIGINT during CGI execution
+			return (delete[] pfds, this->stopServer(), 0);
 		this->removeClosedConnections();
 		delete[] pfds;
-		sleep(1); // #f to removed, only used for to avoid clogging stdout
+		std::cout << ">>>\n";
 	}
 	return (0);
 }
@@ -262,7 +270,7 @@ int		Server::goThroughEvents(struct pollfd* pfds, unsigned int nfds)
 	{
 		if (pfds[socketInd].revents != 0)
 		{
-			std::cout << "Socket fd " << pfds[socketInd].fd << " is ready, events : ";
+			std::cout << "\tSocket fd " << pfds[socketInd].fd << " is ready, events : ";
 			this->displayEvents(pfds[socketInd].revents);
 			if (socketInd < this->_mainSockets.size() && handleNewConnection(socketInd))
 				return (1);
@@ -307,6 +315,7 @@ int		Server::handleNewConnection(unsigned int mainSocketInd)
 {
 	struct sockaddr_in	clientAddress;
 	socklen_t			clientAddressSize;
+	t_portaddr			clientPortaddr;
 	int					clientSocketFd;
 
 	clientAddressSize = sizeof(clientAddress);
@@ -314,11 +323,12 @@ int		Server::handleNewConnection(unsigned int mainSocketInd)
 		reinterpret_cast<sockaddr*>(&clientAddress), &clientAddressSize);
 	if (clientSocketFd < 0)
 		return (logError("[handleNewConnection] error when trying to accept an incoming connection", 1));
-	std::cout << "[waitForConnection] connection accepted in socket fd " << clientSocketFd
-		<< " (IP " << inet_ntoa(clientAddress.sin_addr)
-		<< " ; port " << ntohs(clientAddress.sin_port) << ")\n";
+	clientPortaddr.first = ntohl(clientAddress.sin_addr.s_addr);
+	clientPortaddr.second = ntohs(clientAddress.sin_port);
+	std::cout << "\t[handleNewConnection] connection accepted in socket fd "
+		<< clientSocketFd << " (client portaddr : " << clientPortaddr << ")\n";
 	this->_clientHandlers.push_back(
-		new Client(clientSocketFd, this->_mainSockets[mainSocketInd], this->_vservers));
+		new Client(clientSocketFd, clientPortaddr, this->_mainSockets[mainSocketInd], this->_vservers));
 	return (0);
 }
 
@@ -332,12 +342,12 @@ void	Server::removeClosedConnections(void)
 {
 	int	ind;
 
-	std::cout << "Removing handlers of closed connections from client handlers array\n";
+	//std::cout << "Removing handlers of closed connections from client handlers array\n";
 	for (ind = this->_clientHandlers.size() - 1; ind >= 0; ind--)
 	{
 		if (this->_clientHandlers[ind] == NULL)
 		{
-			std::cout << "\tremoving at index " << ind << "\n";
+			std::cout << "Removing client handler at index " << ind << "\n";
 			this->_clientHandlers.erase(this->_clientHandlers.begin() + ind);
 		}
 	}

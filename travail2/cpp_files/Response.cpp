@@ -17,7 +17,7 @@
 Response::Response(Request* request, t_portaddr clientPortaddr,
 	std::vector<t_vserver>& vservers, std::set<int>& vservIndexes)
 {
-	std::cout << "Constructor for Response\n";
+	std::cout << "Normal constructor for Response\n";
 	this->_request = request;
 	this->_clientPortaddr = clientPortaddr;
 	this->_vserv = this->identifyVserver(vservers, vservIndexes);
@@ -26,10 +26,10 @@ Response::Response(Request* request, t_portaddr clientPortaddr,
 
 // Minimal constructor to allow an instance of <Client>
 // to create a response for malforme requests, with no Request parameter
-// (so <status> should always be '400')
+// (so <status> should always have code '400' or '500')
 Response::Response(std::string status)
 {
-	std::cout << "Constructor for Response to request with status " << status << "\n";
+	std::cout << "Minimal constructor for Response to request with status " << status << "\n";
 	this->makeErrorResponse(status);
 }
 
@@ -155,6 +155,94 @@ t_location*	Response::identifyLocation()
 // PATH TO RESOURCES //
 ///////////////////////
 
+// Check that the resolved directory path (after executing links/'..')
+// 		contains the original directory path at the beginning
+// Necessary for security reasons : ensure that the request accesses resources
+// only within the part of the arborescence given by the config file
+// After checks succeeded, <dirPath> is indeed transformed into resolved directory path
+// 		including the trailing '/'
+int	Response::checkResolvedDirPath(std::string& dirPath)
+{
+	char		realDirPath[PATH_MAX];
+
+	if (*(dirPath.end() - 1) == '/')
+		dirPath.erase(dirPath.end() - 1);
+	if (!realpath(dirPath.c_str(), realDirPath))
+		return (1);
+	if (std::string(realDirPath).find(dirPath) != 0)
+		return (1);
+	dirPath = std::string(realDirPath) + "/";
+	return (0);
+}
+
+// For POST/PUT requests, builds the path where the uploaded file should be stored,
+// using path additions defined in cfg file
+// (checks on request ensures that location is defined,
+//  checks on cfg file ensures that this location has an upload path or a root/alias path)
+// 		\ this location may have an upload path, if so it replaces the <dirPath>
+// 		\ if uploadPath undefined this location has a root or upload path
+// The path is built from parameter <dirPath> (the directory part of request's <_filePath>)
+// 		and stored into that same parameter
+int	Response::buildFullPathUpload(std::string& dirPath)
+{
+	if (!(this->_location) || this->_location->uploadPath.empty())
+		return (1);
+	if (this->_location->uploadPath != "~")
+		dirPath = this->_location->uploadPath + "/";
+	else if (!(this->_location->rootPath.empty()))
+		dirPath = this->_location->rootPath + dirPath;
+	else if (!(this->_location->aliasPath.empty()))
+	{
+		if (dirPath.size() < this->_location->locationPath.size())
+			return (1);
+		dirPath = this->_location->aliasPath
+				+ dirPath.substr(this->_location->locationPath.size() - 1);
+	}
+	else
+		return (1);
+	return (0);
+}
+
+// Transforms the <_filePath> parsed by the POST/PUT Request instance
+// into the real path to the place where the uploaded file should be stored
+// Function can be called with <_filePath> leading to a file or to a directory,
+// 		in the latter case <isDir> must be set so that <filename> remains an empty string
+// Performs steps :
+// 		\ check for empty path / path not beginning with '/'
+// 		\ build directory path according to 'upload'/'root'/'alias' directives from config file
+// 		\ check if resolved directory path is safe (see <checkResolvedFullPath> description)
+// 		\ check if directory path leads indeed to a directory with <stat>
+int	Response::pathToUpload(std::string& fullPath, bool isDir)
+{
+	std::string		dirPath;
+	std::string		filename = "";
+	struct stat		dirStat;
+
+	if (this->_request->_filePath.empty() || this->_request->_filePath[0] != '/')
+		return (1);
+	if (isDir)
+		dirPath = fullPath;
+	else if (divideFilePath(this->_request->_filePath, dirPath, filename))
+		return (1);
+	std::cout << "\tcomputing path to upload : request path has directory path "
+		<< dirPath << " and filename " << filename << "\n";
+	if (this->buildFullPathUpload(dirPath))
+		return (1);
+	std::cout << "\tdirectory path after build : " << dirPath << "\n";
+	if (this->checkResolvedDirPath(dirPath))
+		return (1);
+	std::cout << "\tdirectory path after resolution : " << dirPath << "\n";
+	if (stat(dirPath.c_str(), &dirStat) != 0)
+		return (1);
+	if (!S_ISDIR(dirStat.st_mode))
+	{
+		std::cout << "\tdirectory path does not lead to a directory\n";
+		return (1);
+	}
+	fullPath = dirPath + filename;
+	return (0);
+}
+
 // Builds the path to the resource in the server's arborescence
 // using path additions defined in cfg file
 // 		\ if a location is defined, this location may have root/alias directive
@@ -163,6 +251,8 @@ t_location*	Response::identifyLocation()
 // 		\ if no location undefined or without root/alias, vserver may have a root directive
 // 		\ in all other cases (and in the case of an 'alias' that can't be applied),
 // 			the resource can't be found, so the function returns 1 resulting in a '404' error
+// The path is built from attribute <_filePath> of the request,
+// 		and stored into parameter <fullPath> (which is a reference)
 int	Response::buildFullPathFile(std::string& fullPath)
 {
 	if (this->_location && !(this->_location->rootPath.empty()))
@@ -181,35 +271,11 @@ int	Response::buildFullPathFile(std::string& fullPath)
 	return (0);
 }
 
-// Checks that the resolved full path (after executing links/'..')
-// begins with the base path used as a result of root/alias directives
-// Necessary for security reasons : ensure that the request accesses resources
-// only within the part of the arborescence given by the config file
-// After checks succeeded, <fullPath> is indeed transformed into resolved full path
-int	Response::checkResolvedFullPath(std::string& fullPath)
-{
-	char		realBase[PATH_MAX];
-	std::string	base;
-	std::string	filename;
-	size_t		indLastSlash;
-
-	indLastSlash = fullPath.find_last_of('/');
-	base = fullPath.substr(0, indLastSlash);
-	filename = fullPath.substr(indLastSlash + 1);
-	//std::cout << "base : " << base << ", filename : " << filename << "\n";
-	if (!realpath(base.c_str(), realBase))
-		return (1);
-	if (std::string(realBase).find(base) != 0)
-		return (1);
-	fullPath = std::string(realBase) + "/" + filename;
-	return (0);
-}
-
 // Transforms the <_filePath> parsed by the Request instance
 // into the real path to the resource in server's arborescence
 // 		(function should only be called when <_filePath> does not end with '/')
 // Performs steps :
-// 		\ correcting empty path / path not beginning with '/'
+// 		\ checking for empty path / path not beginning with '/'
 // 		\ building the full path according to 'root'/'alias' directives from config file
 // 		\ check if the resolved full path is safe (see <checkResolvedFullPath> description)
 // Parameters control additional checks and actions :
@@ -223,15 +289,20 @@ int	Response::pathToFile(std::string& fullPath,
 	bool checkFile, bool checkExec, size_t* fileSize)
 {
 	struct stat	fileStat;
+	std::string filename;
+	std::string dirPath;
 
 	if (this->_request->_filePath.empty() || this->_request->_filePath[0] != '/')
-		this->_request->_filePath = "/";
+		return (1);
 	std::cout << "\tURL path to resource : " << this->_request->_filePath << "\n";
 	if (this->buildFullPathFile(fullPath))
 		return (1);
 	std::cout << "\tfull path built : " << fullPath << "\n";
-	if (this->checkResolvedFullPath(fullPath))
+	if (divideFilePath(fullPath, dirPath, filename))
 		return (1);
+	if (this->checkResolvedDirPath(dirPath))
+		return (1);
+	fullPath = dirPath + filename;
 	std::cout << "\tfull path resolved : " << fullPath << "\n";
 	if (checkFile)
 	{
@@ -250,32 +321,20 @@ int	Response::pathToFile(std::string& fullPath,
 		if (checkExec && !(fileStat.st_mode & S_IXUSR))
 			return (1);
 	}
-	std::cout << "\tfile exists and meets requirements\n";
+	std::cout << "\tall file checks succeeded\n";
 	return (0);
 }
-
-/*
-	size_t		indLastSlash;
-
-if (isUpload && this->_location && this->_location->uploadPath != "~")
-	{
-		indLastSlash = this->_request->_filePath.find_last_of('/');
-		if (indLastSlash == std::string::npos)
-			return (1);
-		else
-			filename = this->_request->_filePath.substr(indLastSlash + 1);
-		fullPath = this->_location->uploadPath + "/" + filename;
-	}
-*/
 
 ///////////////////////
 // GENERIC RESPONSES //
 ///////////////////////
 
+// Allocates and fills the response buffer for a response without body,
+// contained entirely in the string <responseStr> given as parameter
 void	Response::makeResponseFromString(std::string& responseStr)
 {
-	this->_responseBuffer = new char[responseStr.size()];
-	bzero(this->_responseBuffer, responseStr.size());
+	this->_responseBuffer = new char[responseStr.size() + 1];
+	bzero(this->_responseBuffer, responseStr.size() + 1);
 	strcpy(this->_responseBuffer, responseStr.c_str());
 	this->_responseSize = responseStr.size();
 }
@@ -293,7 +352,7 @@ void	Response::makeRedirResponse(std::string status, std::string newPath)
 	if (newPath.empty())
 		newPath = this->_request->_filePath + "/";
 	ss << "HTTP/1.1 " << status << "\r\n"
-		<< "Content-Length: 0\r\n"
+		<< "Content-Length: 0" << "\r\n"
 		<< "Location: " << newPath << "\r\n\r\n";
 	responseStr = ss.str();
 	this->makeResponseFromString(responseStr);
@@ -306,7 +365,8 @@ void	Response::makeSuccessResponse(std::string status)
 	std::string			responseStr;
 
 	std::cout << "[Res::Gen] Generating success response with status " << status << "\n";
-	ss << "HTTP/1.1 " << status << "\r\n\r\n";
+	ss << "HTTP/1.1 " << status << "\r\n"
+		<< "Content-Length: 0" << "\r\n\r\n";
 	responseStr = ss.str();
 	this->makeResponseFromString(responseStr);
 }

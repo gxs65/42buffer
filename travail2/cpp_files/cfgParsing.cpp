@@ -242,6 +242,8 @@ int	invalidLocationParams(t_location& l)
 		return (logError("[loca] autoindex ON while default file set is invalid\n", 0));
 	if (l.aliasPath.size() > 0 && l.rootPath.size() > 0)
 		return (logError("[loca] root path and alias path both defined\n", 0));
+	if (l.uploadPath.compare("~") == 0 && (l.aliasPath.empty() && l.rootPath.empty()))
+		return (logError("[loca] upload authorized with neither upload path / root path / alias path", 0));
 	return (0);
 }
 
@@ -252,7 +254,9 @@ int	invalidLocationParams(t_location& l)
 // 			define the path in the server's file arborescence
 // 			at which the file asked requested at this location may be found
 // 		\ 'upload' directive defines path to directory in which uploaded files should be stored,
-// 			if absent upload is forbidden, if present but empty path is the same as 'root'/'alias'
+// 			if absent upload is forbidden, if present but with empty path then upload path is the same as 'root'/'alias'
+// 		\ 'alias'/'root'/'upload' path must not contain the trailing '/',
+// 			so it is removed if it was incorrectly present
 int parseLineLocation(std::string& line, std::ifstream& inStream, void* storage)
 {
 	t_location*					location;
@@ -274,12 +278,16 @@ int parseLineLocation(std::string& line, std::ifstream& inStream, void* storage)
 	{
 		if (tokens.size() != 2 || location->rootPath.size() != 0)
 			return (logError("[loca] invalid 'root' directive\n", 0));
+		if (tokens[1][tokens[1].size() - 1] == '/')
+			tokens[1].erase(tokens[1].end() - 1);
 		location->rootPath = tokens[1];
 	}
 	else if (tokens[0].compare("alias") == 0)
 	{
 		if (tokens.size() != 2 || location->aliasPath.size() != 0)
 			return (logError("[loca] invalid 'alias' directive\n", 0));
+		if (tokens[1][tokens[1].size() - 1] == '/')
+			tokens[1].erase(tokens[1].end() - 1);
 		location->aliasPath = tokens[1];
 	}
 	else if (tokens[0].compare("upload") == 0)
@@ -289,7 +297,11 @@ int parseLineLocation(std::string& line, std::ifstream& inStream, void* storage)
 		if (tokens.size() == 1)
 			location->uploadPath = "~";
 		else
+		{
+			if (tokens[1][tokens[1].size() - 1] == '/')
+				tokens[1].erase(tokens[1].end() - 1);
 			location->uploadPath = tokens[1];
+		}
 	}
 	else if (tokens[0].compare("index") == 0)
 	{
@@ -441,6 +453,8 @@ int parseLineServ(std::string& line, std::ifstream& inStream, void* storage)
 	{
 		if (tokens.size() != 2 || vserv->rootPath.size() != 0)
 			return (logError("[serv] invalid 'root' directive", 0));
+		if (tokens[1][tokens[1].size() - 1] == '/')
+			tokens[1].erase(tokens[1].end() - 1);
 		vserv->rootPath = tokens[1];
 	}
 	else

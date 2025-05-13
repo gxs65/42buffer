@@ -6,7 +6,7 @@
 /*   By: abedin <abedin@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/30 16:08:40 by ilevy             #+#    #+#             */
-/*   Updated: 2025/05/12 17:35:56 by abedin           ###   ########.fr       */
+/*   Updated: 2025/05/13 18:45:56 by abedin           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -40,28 +40,27 @@ Request::~Request()
 // ACCESSORS //
 ///////////////
 
-// This class's member attributes are public, since this is a parsing class with no logic
+// This class' member attributes are public, since this is a parsing class with no logic
 
 ////////////////////////////////
 // HEADERS AND BODY RECEPTION //
 ////////////////////////////////
 
 // Searches <lastBuffer> and <buffer> for a request separator '\r\n\r\n'
-// 		\ takes 2 buffers as arguments, '\r\n\r\n' may begin in first one and end in second one
+// 		\ takes 2 buffers as arguments ('\r\n\r\n' may begin in first one and end in second one)
 // 		\ assembles the buffers into a single `char*` <combined> with <strJoinDefsize>
 // 			(since <buffer> may contain some '\0', its size must be given as arg)
-// 		\ loops through <combined> to find needle '\r\n\r\n' ;
-// 			if found returns the index, relative to <buffer>, of the last '\n'
-// 				(finding a match where the last '\n' is in <lastBuffer> should never happen,
-// 				 since <lastBuffer> was already searched, as <buffer>, during the last call)
-// 		\ returns -1 if no match, and '\0' if finds a '\0' before any '\r\n\r\n'
+// 		\ uses <memFind> to search the bytes of <combined> for the needle '\r\n\r\n'
+// 			~ if no match, returns -1
+// 			~ if found, but the last '\n' is in <lastBuffer> instead of <buffer>, returns -2
+// 				(should never happen, since <lastBuffer> was already searched, as <buffer>, during last call)
+// 			~ if found, returns the index, relative to <buffer>, of the last '\n'
 // /!\ Both buffers can hold SOCKREAD_BUFFER_SIZE bytes,
-// 		<bufferSize> <= SOCKREAD_BUFFER_SIZE and is the effective
+// 		<bufferSize> (<= SOCKREAD_BUFFER_SIZE) is the effective
 // 		number of bytes read in the socket and put in <buffer>
-int	Request::containsHeadersEnd(char *lastBuffer, char* buffer, size_t bufferSize)
+ssize_t	Request::containsHeadersEnd(char *lastBuffer, char* buffer, size_t bufferSize)
 {
-	size_t		ind;
-	size_t		indInNeedle;
+	ssize_t		ind;
 	size_t		sizeLastBuffer;
 	size_t		sizeCombined;
 	char*		combined;
@@ -70,34 +69,24 @@ int	Request::containsHeadersEnd(char *lastBuffer, char* buffer, size_t bufferSiz
 	sizeLastBuffer = strlen(lastBuffer);
 	sizeCombined = sizeLastBuffer + bufferSize;
 	combined = ft_strjoinDefsize(lastBuffer, buffer, bufferSize);
-	ind = 0;
-	while (ind < sizeCombined)
-	{
-		if (combined[ind] == '\0')
-		{
-			delete combined;
-			return (-2);
-		}
-		indInNeedle = 0;
-		while (ind < sizeCombined && indInNeedle < 4 && combined[ind + indInNeedle] == needle[indInNeedle])
-			indInNeedle++;
-		if (indInNeedle == 4 && (ind + indInNeedle - 1 - sizeLastBuffer >= 0))
-		{
-			delete combined;
-			return (ind + indInNeedle - 1 - sizeLastBuffer);
-		}
-		ind++;
-	}
-	delete combined;
-	return (-1);
+	ind = memFind(combined, sizeCombined, needle, 4);
+	delete[] combined;
+	if (ind == -1)
+		return (-1);
+	else if (ind + 3 - sizeLastBuffer < 0)
+		return (-2);
+	else
+		return (ind + 3 - sizeLastBuffer);
 }
 
 // Allocates the `char*` buffer to store the body bytes of this request
+// /!\ Allocates 1 more byte than necessary for <_bodySize>
+// 	   to be safe in case of use on <_body> of <strcpy> or another function that would want to add '\0'
 void	Request::allocateBody()
 {
 	std::cout << "[Req::allocate] allocated body of " << this->_bodySize << " bytes for request\n";
-	this->_body = new char[this->_bodySize];
-	bzero(this->_body, this->_bodySize);
+	this->_body = new char[this->_bodySize + 1];
+	bzero(this->_body, this->_bodySize + 1);
 	this->_nReceivedBodyBytes = 0;
 }
 
@@ -128,15 +117,11 @@ void	Request::appendToBody(char *buffer, size_t bufferSize)
 bool	Request::parse(const std::string& rawHeaders)
 {
 	if (this->parseFirstLine(rawHeaders))
-	{
-		std::cout << "[Req::parse] Error : Invalid request first line\n";
-		return (1);
-	}
+		return (logError("[Req::parse] Error : Invalid request first line", 0));
 	if (this->parseHeaders(rawHeaders))
-	{
-		std::cout << "[Req::parse] Error : Invalid request header lines\n";
-		return (1);
-	}
+		return (logError("[Req::parse] Error : Invalid request header lines", 0));
+	if (this->_path.empty() || this->_path[0] != '/' || this->_headers["Host"].empty())
+		return (logError("[Req::parse] Error : Invalid request path/host fields", 0));
 	this->extractFromURL();
 	this->extractFromHost();
 	this->_parsed = true;
@@ -287,7 +272,7 @@ void	Request::extractFromURL()
 // 			here scheme is HTTP so default port if not mentioned is 80)
 void	Request::extractFromHost()
 {
-	std::string			host = this->_headers[std::string("Host")];
+	std::string			host = this->_headers["Host"];
 	std::string			hostPort;
 	unsigned long		posSeparator;
 	in_addr				addr;
@@ -320,6 +305,22 @@ void	Request::extractFromHost()
 		this->_hostPortaddr.second = 80; // default port number 80 since Webserv is an HTTP server
 }
 
+//////////////////
+// REDIRECTIONS //
+//////////////////
+
+// Public method to be called when a local redirection occurs,
+// which modifies only 1 element inside the request : the path to requested resource
+// Updates the member string <_path> and re-parses it with <extractFromURL>
+int		Request::redirectPath(std::string newPath)
+{
+	if (newPath.empty() || newPath[0] != '/')
+		return (1);
+	this->_path = newPath;
+	this->extractFromURL();
+	return (0);
+}
+
 ///////////
 // UTILS //
 ///////////
@@ -349,7 +350,7 @@ void	Request::logRequest(void)
 		<< "\thasBody " << this->_hasBody << "\n"
 		<< "\tbodySize " << this->_bodySize << "\n";
 	if (this->_hasBody && (this->_headers["Content-Type"] == "application/x-www-form-urlencoded"
-		|| this->_headers["Content-Type"] == "multipart/form-data"
+		|| this->_headers["Content-Type"].compare(0, 19, "multipart/form-data") == 0
 		|| this->_headers["Content-Type"] == "text/plain"))
 	//if (1) // #f : to remove once tests are done
 	{

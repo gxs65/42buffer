@@ -89,6 +89,21 @@ int		Client::handleEvent(struct pollfd& pfd)
 // SENDING TO SOCKET //
 ///////////////////////
 
+// Passes this instance of client into RECEIVING mode (listens to incoming requests bytes)
+void	Client::passToReceiving()
+{
+	if (this->_request)
+	{
+		delete this->_request;
+		this->_request = NULL;
+	}
+	delete this->_response; this->_response = NULL;
+	this->_requestHeaders = "";
+	bzero(this->_lastBuffer, READSOCK_BUFFER_SIZE + 1);
+	this->_state = RECEIVING;
+	std::cout << "[CH::sendHTTP] Going into receiving mode\n";
+}
+
 // Uses function <send> to send the data in <_responseBuffer> through the socket ;
 // 		if all data is sent then puts this instance of <Client> back in RECEIVING mode
 // 		(by emptying the buffers and destroying the instances of <Response> and <Request>,
@@ -113,15 +128,7 @@ int		Client::sendHTTP(void)
 	if (this->_nbytesSent >= this->_responseSize)
 	{
 		std::cout << "\t\t[CH::sendHTTP] full response sent\n";
-		if (this->_request)
-		{
-			delete this->_request;
-			this->_request = NULL;
-		}
-		delete this->_response; this->_response = NULL;
-		this->_requestHeaders = "";
-		bzero(this->_lastBuffer, READSOCK_BUFFER_SIZE + 1);
-		this->_state = RECEIVING;
+		this->passToReceiving();
 	}
 	return (0);
 }
@@ -130,18 +137,32 @@ int		Client::sendHTTP(void)
 // RECEIVING FROM SOCKET //
 ///////////////////////////
 
+// Passes this instance of client into SENDING mode (tries to send response bytes)
+void	Client::passToSending()
+{
+	this->_responseBuffer = this->_response->getResponseBuffer();
+	this->_responseSize = this->_response->getResponseSize();
+	this->_state = SENDING;
+	this->_nbytesSent = 0;
+	std::cout << "[CH::receiveHTTP] Going into sending mode\n";
+}
+
 // When a request in instance of <Request> is complete :
 // 		\ create Instance of <Response> to generate response
-// 		\ stores the response size and a pointer to the response buffer in member variables
+// 		\ checks Response returm value : 0 for success, 1 for fatal error,
+// 			2 for local redirection <=> the instance of <Request> was modified
+// 			with a new path, so a new instance of <Response> must be created to handle it
+// 				(-> counter <recurrLvl> to avoid infinite redirections)
 // 		\ puts this instance of <Client> into SENDING mode,
 // 			so that it awaits a POLLOUT event on the socket to be able to send the response
+// 				(this also stores the response size and a pointer to the response buffer in member variables)
 // /!\ returns 1 in case of fatal error encountered in <Response.produceResponse()>,
 // but this never happens in current implementation : errors when producing response are either
 // 		\ client errors (invalid path, forbidden method) -> generates response with code 400
 // 		\ system calls errors of <open>/<read>/<pipe>... -> generates response with code 500
-// <=> even system calls are not considered fatal to the server,
+// <=> even system call errors are not considered fatal to the server,
 // 	   in order to keep it operational for other clients
-int	Client::handleCompleteRequest()
+int	Client::handleCompleteRequest(int recurrLvl)
 {
 	int		responseRet;
 
@@ -149,29 +170,32 @@ int	Client::handleCompleteRequest()
 	this->_response = new Response(this->_request, this->_clientPortAddr,
 				this->_vservers, this->_mainSocket.vservIndexes);
 	responseRet = this->_response->produceResponse();
-	this->_response->logResponseBuffer(); // activate when only non-binary files are transmitted
-	if (responseRet) // never happens in current implementation
+	//this->_response->logResponseBuffer(); // activate when only non-binary files are transmitted
+	if (responseRet == 1) // never happens in current implementation
 	{
 		std::cout << "[CH::handleCompReq] Response instance encountered fatal error\n";
 		return (1);
 	}
-	this->_responseBuffer = this->_response->getResponseBuffer();
-	this->_responseSize = this->_response->getResponseSize();
-	this->_state = SENDING;
-	this->_nbytesSent = 0;
-	std::cout << "[CH::receiveHTTP] Going into sending mode\n";
+	else if (responseRet == 2)
+	{
+		delete this->_response;
+		if (recurrLvl > 100)
+			this->handleProblematicRequest("508 Loop Detected");
+		std::cout << "[CH::handleCompReq] Response instance returned local redirect, recurring\n";
+		return (this->handleCompleteRequest(recurrLvl + 1));
+	}
+	std::cout << "[CH::handleCompReq] Response instance returned successfully\n";
+	this->passToSending();
 	return (0);
 }
 
 // Creates a <Response> instance with minimal initialisation
-// since it only has to generate the HTTP response for error 400 "Malformed request"
+// since it only has to generate the HTTP response for an error
 // then puts this instance of <Client> into sending mode
-void	Client::handleMalformedRequest()
+void	Client::handleProblematicRequest(std::string status)
 {
-	this->_response = new Response("400 Bad Request");
-	this->_responseBuffer = this->_response->getResponseBuffer();
-	this->_state = SENDING;
-	this->_nbytesSent = 0;
+	this->_response = new Response(status);
+	this->passToSending();
 }
 
 // Called when bytes in <buffer> received on the socket contain request separator '\r\n\r\n'
@@ -183,9 +207,14 @@ void	Client::handleMalformedRequest()
 // 			then adds bytes AFTER '\r\n\r\n' to this body
 // 		\ if request has no body, calls <handleCompleteRequest> straight to pass into SENDING mode
 // Some details :
-// 		\ <bufferRemaining> is created to pass the bytes AFTER '\r\n\r\n' to <receiveBodyPart>
+// 		\ <bufferRemaining> is built to pass the bytes AFTER '\r\n\r\n' to <receiveBodyPart>
 // 		\ <receiveBodyPart> may call <handleCompleteRequest> if the remaining bytes are enough to complete body
-int	Client::finishRequestHeaders(char *buffer, size_t bufferSize, int indHeadersEnd)
+// 			(edge case : if body size <=> "Content-Length" is 0,
+// 				then  <receiveBodyPart> will definitely call <handleCompleteRequest>)
+// 		\ condition `indHeadersEnd == bufferSize - 1 && bodySize > 0` handles cases where separator
+// 		  is at the end of buffer, so there is nothing left in buffer to append to body
+// 			(except in the edge case where body size is 0, then <receiveBodyPart> must be called to complete request)
+int	Client::finishRequestHeaders(char *buffer, size_t bufferSize, ssize_t indHeadersEnd)
 {
 	char	bufferRemaining[READSOCK_BUFFER_SIZE + 1];
 
@@ -195,23 +224,23 @@ int	Client::finishRequestHeaders(char *buffer, size_t bufferSize, int indHeaders
 	if (this->_request->parse(this->_requestHeaders))
 	{
 		std::cout << "\t\tMalformed request : headers cannot be parsed\n";
-		this->handleMalformedRequest();
+		this->handleProblematicRequest("400 Bad Request");
 		return (0);
 	}
 	if (this->_request->_hasBody)
 	{
 		this->_request->allocateBody();
-		if (indHeadersEnd == static_cast<int>(bufferSize - 1))
+		if (indHeadersEnd == static_cast<ssize_t>(bufferSize - 1) && this->_request->_bodySize > 0)
 			return (0);
 		std::cout << "\t\trequest has body of expected size " << this->_request->_bodySize
 			<< ", appending remaining bytes of buffer to body\n";
 		bzero(bufferRemaining, READSOCK_BUFFER_SIZE + 1);
 		memcpy(bufferRemaining, buffer + indHeadersEnd + 1, bufferSize - indHeadersEnd - 1);
-		this->receiveBodyPart(bufferRemaining, bufferSize - indHeadersEnd - 1);
+		this->receiveBodyPart(bufferRemaining, bufferSize - indHeadersEnd - 1); // second argument may be 0
 		return (0);
 	}
 	else
-		return (this->handleCompleteRequest());
+		return (this->handleCompleteRequest(0));
 }
 
 // Handles bytes in <buffer> received on the socket BEFORE the request separator '\r\n\r\n'
@@ -229,14 +258,14 @@ int	Client::finishRequestHeaders(char *buffer, size_t bufferSize, int indHeaders
 // 				<Request.containsHeadersEnd> get both, assembles them and searches the whole
 int	Client::receiveHeadersPart(char *buffer, size_t bufferSize)
 {
-	int		indHeadersEnd;
+	ssize_t		indHeadersEnd;
 
 	indHeadersEnd = Request::containsHeadersEnd(this->_lastBuffer, buffer, bufferSize);
 	std::cout << "\t\tResult of search for headers end in bytes read : " << indHeadersEnd << "\n";
 	if (indHeadersEnd == -2)
 	{
-		std::cout << "\t\tMalformed request : EOS character in headers part\n";
-		this->handleMalformedRequest();
+		std::cout << "\t\tError during search : separator found in lastBuffer instead of current buffer\n";
+		this->handleProblematicRequest("500 Internal Server Error");
 		return (0);
 	}
 	else if (indHeadersEnd == -1)
@@ -259,16 +288,16 @@ int	Client::receiveBodyPart(char* buffer, size_t bufferSize)
 {
 	if (this->_request->_nReceivedBodyBytes + bufferSize == this->_request->_bodySize)
 	{
-		std::cout << "\t\t[CH::receiveHTTP] Received enough bytes to complete body ("
+		std::cout << "\t\t[CH::receiveHTTP] Received just enough bytes to complete body ("
 			<< this->_request->_bodySize << " / " << this->_request->_bodySize << ")\n";
 		this->_request->appendToBody(buffer, bufferSize);
-		return (this->handleCompleteRequest());
+		return (this->handleCompleteRequest(0));
 	}
 	else if (this->_request->_nReceivedBodyBytes + bufferSize > this->_request->_bodySize)
 	{
 		std::cout << "\t\t[CH::receiveHTTP] (Warning) Received more than enough bytes received for body\n";
 		this->_request->appendToBody(buffer, this->_request->_bodySize - this->_request->_nReceivedBodyBytes);
-		return (this->handleCompleteRequest());
+		return (this->handleCompleteRequest(0));
 	}
 	else
 	{

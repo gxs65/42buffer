@@ -4,77 +4,81 @@
 // HANDLING CGI - GENERATE RESPONSE //
 //////////////////////////////////////
 
-int		Response::generateCGIResponseClientRedirectDoc(std::map<std::string, std::string>& cgiHeaders,
-								std::string& statusCode, std::string& statusDesc)
-{
-	std::string	responseStr;
-
-	(void)cgiHeaders;(void)statusCode;(void)statusDesc;
-	std::cout << "\t-> generating response for client redirect, with document\n";
-	responseStr = "HTTP/1.1 200 OK\r\nContent-Length: 9\r\nContent-Type: text/html\r\n\r\nCREDIRDOC";
-	this->_responseBuffer = new char[responseStr.size()];
-	strcpy(this->_responseBuffer, responseStr.c_str());
-	this->_responseSize = responseStr.size();
-	return (0);
-}
-
+// Generates the HTTP response, after CGI output is processed, for case : client redirection
+// 		(<=> indicate the client to send a new request, with the path given in "Location" instead)
+// Checks that CGI output contains only the "Location" header and that status code is 302, as required by RFC
 int		Response::generateCGIResponseClientRedirect(std::map<std::string, std::string>& cgiHeaders,
 						std::string& statusCode, std::string& statusDesc)
 {
-	std::string	responseStr;
+	std::stringstream	ss;
+	std::string			responseStr;
 
-	(void)cgiHeaders;(void)statusCode;(void)statusDesc;
 	std::cout << "\t-> generating response for client redirect, without document\n";
-	responseStr = "HTTP/1.1 200 OK\r\nContent-Length: 6\r\nContent-Type: text/html\r\n\r\nCREDIR";
-	this->_responseBuffer = new char[responseStr.size()];
-	strcpy(this->_responseBuffer, responseStr.c_str());
-	this->_responseSize = responseStr.size();
+	if (cgiHeaders.size() > 1 || this->_cgiOutputBody.size() > 0)
+		return (this->makeErrorResponse("500 Internal Server Error (CGI output credir with non-Location headers)"), 0);
+	if (statusCode.empty())
+	{
+		statusCode = "302";
+		statusDesc = "Found";
+	}
+	else if (statusCode != "302")
+		return (this->makeErrorResponse("500 Internal Server Error (CGI output credir without code 302)"), 0);
+
+	ss << "HTTP/1.1 " << statusCode << " " << statusDesc << "\r\n"
+		<< "Content-Length: 0" << "\r\n"
+		<< "Location: " << cgiHeaders["Location"] << "\r\n\r\n";
+	responseStr = ss.str();
+	this->makeResponseFromString(responseStr);
 	return (0);
 }
 
+// Handles, after CGI output is processed, the case : local redirection
+// Although the function is named <generateCGIResponse...> for coherence,
+// it does not create an HTTP response in <_responseBuffer>, instead
+// 		\ it checks that CGI output contains only the "Location" header as required by RFC
+// 		\ updates the path in the instance of <Request> to be the path delivered by the CGI
+// 		\ returns special return value 2 to indicate the calling instance of <Client>
+// 			that the request must be reprocessed (with a new <Response> instance) because of redirection
 int		Response::generateCGIResponseLocalRedirect(std::map<std::string, std::string>& cgiHeaders,
 						std::string& statusCode, std::string& statusDesc)
 {
-	std::string	responseStr;
+	std::string		responseStr;
+	std::string&	newPath = cgiHeaders["Location"];
 
-	(void)cgiHeaders;(void)statusCode;(void)statusDesc;
-	std::cout << "\t-> generating response for local redirect\n";
-	responseStr = "HTTP/1.1 200 OK\r\nContent-Length: 6\r\nContent-Type: text/html\r\n\r\nLREDIR";
-	this->_responseBuffer = new char[responseStr.size()];
-	strcpy(this->_responseBuffer, responseStr.c_str());
-	this->_responseSize = responseStr.size();
+	(void)statusCode; (void)statusDesc;
+	std::cout << "\t-> generating response for local redirect to " << newPath << "\n";
+	if (cgiHeaders.size() > 1 || this->_cgiOutputBody.size() > 0)
+		return (this->makeErrorResponse("500 Internal Server Error (CGI output lredir with non-Location headers)"), 0);
+	if (this->_request->redirectPath(newPath))
+		return (this->makeErrorResponse("500 Internal Server Error (CGI output lredir with invalid new path)"), 0);
+	return (2);
+}
+
+// Checks the coherence of CGI output headers
+// ("Content-Length" must be absent, "Content-Type" present when there is a body)
+int Response::checkCGIOutputBody(std::map<std::string, std::string>& cgiHeaders)
+{
+	if (cgiHeaders.count("Content-Length") > 0)
+		return (logError("\tError: CGI defined header Content-Length", 0));
+	if (this->_cgiOutputBody.size() > 0 && cgiHeaders.count("Content-Type") == 0)
+		return (logError("\tError: CGI did not define header Content-Type", 0));
 	return (0);
 }
 
-// Generates the HTTP response, after CGI output is processed, for the most common case : no redirection
-// 1. Checks the validity of headers ("Content-Length" absent, "Content-Type" present)
-// 	  and defines default status code and description if not provided in CGI output,
-// 2. allocates the response buffer, then concatenates in it :
+// For CGI requests resulting in a document response with/without redirect,
+// allocates the response buffer, then concatenates in it :
 // 	  the status line + all header lines + the CGI output body (if there is one)
 // (the CGI output body content was stored as <std::vector> of characters,
 // 		so its bytes are added one by one to the response buffer)
-int		Response::generateCGIResponseDoc(std::map<std::string, std::string>& cgiHeaders,
+int	Response::generateCGIResponseWithDoc(std::map<std::string, std::string>& cgiHeaders,
 						std::string& statusCode, std::string& statusDesc)
 {
 	std::stringstream								headersStream;
 	std::string										headersString;
-	size_t											totalPayloadSize;
+	size_t											totalSize;
 	size_t											ind;											
 	std::string										responseHeaders;
 	std::map<std::string, std::string>::iterator	headersIt;
-
-	std::cout << "\t-> generating response without redirect, body of size " << this->_cgiOutputBody.size() << "\n";
-	if (cgiHeaders.count("Content-Length") > 0)
-		return (logError("\tError: CGI defined header Content-Length", 0),
-			this->makeErrorResponse("500 Internal Server Error"), 0);
-	if (this->_cgiOutputBody.size() > 0 && cgiHeaders.count("Content-Type") == 0)
-		return (logError("\tError: CGI did not define header Content-Type", 0),
-			this->makeErrorResponse("500 Internal Server Error"), 0);
-	if (statusCode.empty())
-	{
-		statusCode = "200";
-		statusDesc = "OK";
-	}
 
 	headersStream << "HTTP/1.1 " << statusCode << " " << statusDesc << "\r\n"
 		<< "Content-Length: " << itostr(this->_cgiOutputBody.size()) << "\r\n";
@@ -82,18 +86,54 @@ int		Response::generateCGIResponseDoc(std::map<std::string, std::string>& cgiHea
 		headersStream << (*headersIt).first << ": " << (*headersIt).second << "\r\n";
 	headersStream << "\n";
 	headersString = headersStream.str();
-	totalPayloadSize = headersString.size() + this->_cgiOutputBody.size();
+	totalSize = headersString.size() + this->_cgiOutputBody.size();
 	std::cout << "[Res::fileResponse] headers of size " << headersString.size() << " + CGI output body of size "
-		<< this->_cgiOutputBody.size() << " = payload of size " << totalPayloadSize << " to be allocated\n";
+		<< this->_cgiOutputBody.size() << " = payload of size " << totalSize << " to be allocated\n";
 	// Allocate response buffer with enough space for whole CGI output body
-	this->_responseBuffer = new char[totalPayloadSize];
-	bzero(this->_responseBuffer, totalPayloadSize);
+	this->_responseBuffer = new char[totalSize + 1];
+	bzero(this->_responseBuffer, totalSize);
 	strcpy(this->_responseBuffer, headersString.c_str());
-	// Copy CGI output body into response buffer (followind headers part)
+	// Copy CGI output body into response buffer (following headers part)
 	for (ind = 0; ind < this->_cgiOutputBody.size(); ind++)
 		this->_responseBuffer[headersString.size() + ind] = this->_cgiOutputBody[ind];
-	this->_responseSize = totalPayloadSize;
+	this->_responseSize = totalSize;
 	return (0);
+}
+
+// Generates the HTTP response, after CGI output is processed, for case : client redirection with document
+// Checks that headers are coherent and that the status code is 302 as required by RFC,
+// 		then calls <generateCGIResponseWithDoc> to copy CGI output body inside response buffer
+int		Response::generateCGIResponseClientRedirectDoc(std::map<std::string, std::string>& cgiHeaders,
+						std::string& statusCode, std::string& statusDesc)
+{
+	std::cout << "\t-> generating response for client redirect, with document\n";
+	if (this->checkCGIOutputBody(cgiHeaders))
+		return (this->makeErrorResponse("500 Internal Server Error (CGI output unreadable)"), 0);
+	if (statusCode.empty())
+	{
+		statusCode = "302";
+		statusDesc = "Found";
+	}
+	else if (statusCode != "302")
+		return (this->makeErrorResponse("500 Internal Server Error (CGI output credirdoc without code 302)"), 0);
+	return (this->generateCGIResponseWithDoc(cgiHeaders, statusCode, statusDesc));
+}
+
+// Generates the HTTP response, after CGI output is processed, for the most common case : no redirection
+// Checks that headers are coherent and adds a status (with default value) if absent,
+// 		then calls <generateCGIResponseWithDoc> to copy CGI output body inside response buffer
+int		Response::generateCGIResponseNoredir(std::map<std::string, std::string>& cgiHeaders,
+						std::string& statusCode, std::string& statusDesc)
+{
+	std::cout << "\t-> generating response without redirect, body of size " << this->_cgiOutputBody.size() << "\n";
+	if (this->checkCGIOutputBody(cgiHeaders))
+		return (this->makeErrorResponse("500 Internal Server Error (CGI output unreadable)"), 0);
+	if (statusCode.empty())
+	{
+		statusCode = "200";
+		statusDesc = "OK";
+	}
+	return (this->generateCGIResponseWithDoc(cgiHeaders, statusCode, statusDesc));
 }
 
 ///////////////////////////////////////
@@ -105,7 +145,9 @@ int		Response::generateCGIResponseDoc(std::map<std::string, std::string>& cgiHea
 
 // Goes through the <std::vector> of <char> storing the CGI output
 // to find the double linebreak separating headers from body
-// (if no double linebreak or double linebreak at position 0, it is an error)
+// Returns the index of the first '\n' in the double linebreak
+// (return value 0 also serves as error indicator,
+//  since there is an error if double linebreak absent, and also if present at position 0)
 unsigned long	Response::findCGIOutputHeader()
 {
 	unsigned long	ind = 0;
@@ -253,14 +295,14 @@ int	Response::processCGIOutput()
 
 	logCGIOutput(this->_cgiOutput);
 	if (this->parseCGIHeaders(cgiHeaders, statusCode, statusDesc))
-		return (this->makeErrorResponse("500 Internal Server Error"), 0);
+		return (this->makeErrorResponse("500 Internal Server Error (CGI output unreadable)"), 0);
 	std::cout << "\textracted headers string from CGI output :\n";
 	logCGIHeaders(cgiHeaders, statusCode, statusDesc, this->_cgiOutputBody);
 
 	if (cgiHeaders.count("Location") == 1)
 	{
 		if (cgiHeaders["Location"].size() == 0)
-			return (this->makeErrorResponse("500 Internal Server Error"), 0);
+			return (this->makeErrorResponse("500 Internal Server Error (CGI output unreadable)"), 0);
 		else if (this->_cgiOutputBody.size() > 0)
 			return (this->generateCGIResponseClientRedirectDoc(cgiHeaders, statusCode, statusDesc));
 		else if (cgiHeaders["Location"][0] == '/')
@@ -269,7 +311,7 @@ int	Response::processCGIOutput()
 			return (this->generateCGIResponseClientRedirect(cgiHeaders, statusCode, statusDesc));
 	}
 	else
-		return (this->generateCGIResponseDoc(cgiHeaders, statusCode, statusDesc));
+		return (this->generateCGIResponseNoredir(cgiHeaders, statusCode, statusDesc));
 }
 
 //////////////////////////////////
@@ -449,7 +491,7 @@ int		Response::waitForChildCGI(pid_t pid, int *pipeRequest, int *pipeResponse)
 		{
 			waitpid(pid, &exitStatus, 0);
 			std::cout << "\tError: unable to feed body to CGI program\n";
-			return (this->makeErrorResponse("500 Internal Server Error"), 0);
+			return (this->makeErrorResponse("500 Internal Server Error (system call)"), 0);
 		}
 	}
 	else
@@ -458,7 +500,7 @@ int		Response::waitForChildCGI(pid_t pid, int *pipeRequest, int *pipeResponse)
 	{
 		waitpid(pid, &exitStatus, 0);
 		std::cout << "\tError: unable to read response from CGI program\n";
-		return (this->makeErrorResponse("500 Internal Server Error"), 0);
+		return (this->makeErrorResponse("500 Internal Server Error (system call)"), 0);
 	}
 	waitpid(pid, &exitStatus, 0);
 	if (WIFEXITED(exitStatus))
@@ -466,12 +508,12 @@ int		Response::waitForChildCGI(pid_t pid, int *pipeRequest, int *pipeResponse)
 	else
 	{
 		std::cout << "\tError: CGI program did not exit\n";
-		return (this->makeErrorResponse("500 Internal Server Error"), 0);
+		return (this->makeErrorResponse("500 Internal Server Error (system call)"), 0);
 	}
 	if (exitStatus == 127)
 	{
 		std::cout << "\tError: CGI program could not be executed\n";
-		return (this->makeErrorResponse("500 Internal Server Error"), 0);
+		return (this->makeErrorResponse("500 Internal Server Error (system call)"), 0);
 	}
 	std::cout << "\t[Res::CGI] CGI program terminated with exit status " << exitStatus << "\n";
 	return (this->processCGIOutput());
@@ -489,14 +531,14 @@ int		Response::forkCGI(std::string& fullPath)
 
 	if (pipe(pipeRequest) == -1)
 		return (logError("Error: unable to create pipe for CGI\n", 1),
-			this->makeErrorResponse("500 Internal Server Error"), 0);
+			this->makeErrorResponse("500 Internal Server Error (system call)"), 0);
 	if (pipe(pipeResponse) == -1)
 		return (logError("Error: unable to create pipe for CGI\n", 1),
-			this->makeErrorResponse("500 Internal Server Error"), 0);
+			this->makeErrorResponse("500 Internal Server Error (system call)"), 0);
 	pid = fork();
 	if (pid == -1)
 		return (logError("Error: unable to fork child for CGI\n", 1),
-			this->makeErrorResponse("500 Internal Server Error"), 0);
+			this->makeErrorResponse("500 Internal Server Error (system call)"), 0);
 	else if (pid == 0)
 	{
 		close(pipeRequest[1]);
@@ -528,8 +570,8 @@ int	Response::handleCGI()
 	std::string	fullPath;
 
 	if (this->_request->_toDir)
-		return (this->makeErrorResponse("404 CGI To A Directory"), 0);
+		return (this->makeErrorResponse("404 Not Found (CGI to a directory)"), 0);
 	if (this->pathToFile(fullPath, 1, 1, NULL))
-		return (this->makeErrorResponse("404 CGI Executable Not Found"), 0);
+		return (this->makeErrorResponse("404 Not Found (CGI executable not found)"), 0);
 	return (this->forkCGI(fullPath));
 }

@@ -11,7 +11,7 @@
 // 		\ aliasPath : path to substitute to locationPath in URL (incompatible with <rootPath>)
 // 		\ acceptedMethods : names ('GET', 'POST', ...) of allowed request methods for this location
 // 		\ cgiExtensions : list of file extensions associated that require to execute a CGI
-// 		\ uploadPath : path (appended to <rootPath>) in which uploaded files must be stored
+// 		\ uploadPath : absolute path in which uploaded files must be stored
 // 		\ defaultFileWhenDir : path to index file to serve if a GET requests a directory URL
 // 		\ autoIndex : boolean defining wether the server can generate index files itself
 // 			(if set, <defaultFileWhenDir> can't be set)

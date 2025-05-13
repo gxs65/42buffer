@@ -35,7 +35,7 @@ int	Response::makeFileResponse(std::string& fullPath, size_t fileSize)
 {
 	std::stringstream	headersStream;
 	std::string			headersString;
-	size_t				totalPayloadSize;
+	size_t				totalSize;
 
 	// Create HTTP format headers for response
 	headersStream << "HTTP/1.1 200 OK\r\n"
@@ -43,19 +43,19 @@ int	Response::makeFileResponse(std::string& fullPath, size_t fileSize)
 			 << "Content-Length: " << fileSize << "\r\n"
 			 << "\r\n";
 	headersString = headersStream.str();
-	totalPayloadSize = headersString.size() + fileSize;
+	totalSize = headersString.size() + fileSize;
 	std::cout << "[Res::fileResponse] headers of size " << headersString.size() << " + file of size "
-		<< fileSize << " = payload of size " << totalPayloadSize << " to be allocated\n";
+		<< fileSize << " = total size " << totalSize << " to be allocated\n";
 	// Allocate response buffer with enough space for whole file content
-	this->_responseBuffer = new char[totalPayloadSize];
-	bzero(this->_responseBuffer, totalPayloadSize);
+	this->_responseBuffer = new char[totalSize + 1];
+	bzero(this->_responseBuffer, totalSize);
 	strcpy(this->_responseBuffer, headersString.c_str());
 	if (this->readFullFileInBuffer(fullPath, fileSize, this->_responseBuffer + headersString.size()))
 	{
 		delete[] this->_responseBuffer; this->_responseBuffer = NULL;
-		return (makeErrorResponse("500 Internal Server Error"), 0);
+		return (makeErrorResponse("500 Internal Server Error (system call)"), 0);
 	}
-	this->_responseSize = totalPayloadSize;
+	this->_responseSize = totalSize;
 	return (0);
 }
 
@@ -78,7 +78,7 @@ std::string	Response::getResponseBodyType()
 
 int	Response::handleGetOnDir()
 {
-	this->makeErrorResponse("404 Not Found");
+	this->makeErrorResponse("404 Not Found (GET on directory)");
 	return (0);
 }
 

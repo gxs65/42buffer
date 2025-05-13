@@ -6,7 +6,7 @@
 /*   By: abedin <abedin@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/28 15:09:46 by ilevy             #+#    #+#             */
-/*   Updated: 2025/05/12 18:45:51 by abedin           ###   ########.fr       */
+/*   Updated: 2025/05/13 20:04:32 by abedin           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -221,6 +221,7 @@ int	main(int ac, char **av)
 	verifier si on devrait definir une taille de buffer de sortie
 - verifier le fonctionnement des autres methodes d'envoi de donnees de formulaire (querystring, formulaire)
 - verifier si il y a un truc a gerer avec les headers composes de plusieurs champs separes par des ';'
+- tester profondement les cas ou on fait une requete sur '/' (la racine)
 
 - verifications sur la gestion des connexions avec le client :
 	\ conditions de fin de requête = "\r\n\r\n" et pas de content length,
@@ -233,4 +234,17 @@ int	main(int ac, char **av)
 				(on reviendra au traitement de la prochaine requête quand on aura envoyé la réponse à la première)
 		/!\ implémentation ressemblera un peu à la démarche de gnl de check s'il y a un '\n' dans le remainder
 			avant de read à nouveau BUFFER_SIZE caractères (sauf que notre condition de fin de requête est plus complexe que '\n')
+
+- gestion de Transfer-Encoding: Chunked
+	\ autoriser l'absence de Content-Length quand le body est chunked
+	\ parser le body au fur et a mesure des receptions, dans <Request.appendToBody>
+	\ valeur de retour de <Request.appendToBody> pour indiquer si on a fini
+		-> y mettre aussi la logique pour les requetes classiques avec Content-Length
+	\ update <Request._bodySize> et realloc <Request._body> au fur et a mesure des chunks
+		(double la longueur du body a chaque alloc pour eviter les copies trop frequentes)
+	\ rappel solutions pour accueillir des donnees de taille inconnue
+		~ allocation manuelle et reallocation (GNL naif) -> complexe, beaucoup de copie inutile
+		~ allocation par conteneur std::vector<char> -> beaucoup de copie inutile
+		~ allocation manuelle dans une liste chainee (GNL orig) -> complexe
+		~ enregistrement des donnees dans un fichier temporaire -> tres bien, pas d'utilisation de la RAM !
 */

@@ -68,3 +68,17 @@ char*	ft_strjoinDefsize(char* s1, char* s2, size_t sizes2)
 		res[ind] = s2[ind - sizes1];
 	return (res);
 }
+
+// Divides <path> into its directory part <dirPath> and its filename part <filename>
+// Returns 1 if no '/' separator was found
+int	divideFilePath(std::string& path, std::string& dirPath, std::string& filename)
+{
+	size_t ind;
+
+	ind = path.find_last_of('/');
+	if (ind == std::string::npos)
+		return (1);
+	dirPath = path.substr(0, ind + 1);
+	filename = path.substr(ind + 1);
+	return (0);
+}

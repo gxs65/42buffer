@@ -51,18 +51,23 @@ class Response
 		t_vserver*			identifyVserver(std::vector<t_vserver>& vservers, std::set<int>& vservIndexes);
 		t_location*			identifyLocation();
 		// Find path to resource
+		int					buildFullPathUpload(std::string& dirPath);
+		int					pathToUpload(std::string& fullPath, bool isDir);
+		int					buildFullPathFile(std::string& fullPath);
+		int					checkResolvedDirPath(std::string& dirPath);
 		int					pathToFile(std::string& fullPath,
 								bool checkFile, bool checkExec, size_t* fileSize);
-		int					buildFullPathFile(std::string& fullPath);
-		int					checkResolvedFullPath(std::string& fullPath);
 		// Generate CGI response
-		int					generateCGIResponseClientRedirectDoc(std::map<std::string, std::string>& cgiHeaders,
-								std::string& statusCode, std::string& statusDesc);
+		int 				checkCGIOutputBody(std::map<std::string, std::string>& cgiHeaders);
 		int					generateCGIResponseClientRedirect(std::map<std::string, std::string>& cgiHeaders,
 								std::string& statusCode, std::string& statusDesc);
 		int					generateCGIResponseLocalRedirect(std::map<std::string, std::string>& cgiHeaders,
 								std::string& statusCode, std::string& statusDesc);
-		int					generateCGIResponseDoc(std::map<std::string, std::string>& cgiHeaders,
+		int					generateCGIResponseWithDoc(std::map<std::string, std::string>& cgiHeaders,
+								std::string& statusCode, std::string& statusDesc);
+		int					generateCGIResponseClientRedirectDoc(std::map<std::string, std::string>& cgiHeaders,
+								std::string& statusCode, std::string& statusDesc);
+		int					generateCGIResponseNoredir(std::map<std::string, std::string>& cgiHeaders,
 								std::string& statusCode, std::string& statusDesc);
 		// Process CGI output
 		int					parseCGIStatusLine(std::string& line, std::string& statusCode, std::string& statusDesc);
@@ -94,6 +99,12 @@ class Response
 		int					handleGet();
 		// Handle POST/PUT/DELETE (non-CGI)
 		int					writeFullBufferInFile(std::string& fullPath, size_t bufferSize, char *buffer);
+		int					uploadFile(std::string& fullPath, unsigned long fileSize, char* fileContent, bool makeResponse);
+		char*				extractMultipartBoundary(size_t& boundarySize);
+		int					handlePostOnePart(std::string& dirPath, char* part, size_t partSize);
+		void				divideMultipart(std::string& dirPath, char* boundary, size_t boundarySize);
+		int					handlePostMultipart();
+		int					handlePostRaw();
 		int					handlePost();
 		int					handleDelete();
 

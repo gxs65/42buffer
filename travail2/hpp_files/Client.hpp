@@ -36,13 +36,17 @@ class	Client
 		t_mainSocket&			getMainSocket();
 
 	private:
-		void					handleMalformedRequest();
-		int						handleCompleteRequest();
-		int						finishRequestHeaders(char *buffer, size_t bufferSize, int indHeadersEnd);
+		// Actions when in SENDING mode
+		void					passToReceiving();
+		int						sendHTTP();
+		// Actions when in RECEIVING mode
+		void					passToSending();
+		void					handleProblematicRequest(std::string status);
+		int						handleCompleteRequest(int recurrLvl);
+		int						finishRequestHeaders(char *buffer, size_t bufferSize, ssize_t indHeadersEnd);
 		int						receiveHeadersPart(char *buffer, size_t bufferSize);
 		int						receiveBodyPart(char* buffer, size_t bufferSize);
 		int						receiveHTTP();
-		int						sendHTTP();
 		// Memory of server's config
 		int								_socketFd;
 		t_mainSocket&					_mainSocket;

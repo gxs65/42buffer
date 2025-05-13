@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   webserv.hpp                                        :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: administyrateur <administyrateur@studen    +#+  +:+       +#+        */
+/*   By: abedin <abedin@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/28 15:19:26 by ilevy             #+#    #+#             */
-/*   Updated: 2025/05/09 20:48:12 by administyra      ###   ########.fr       */
+/*   Updated: 2025/05/13 15:22:03 by abedin           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -53,6 +53,9 @@ void		free2dimArray(char** arr, int size);
 void		trimString(std::string& s);
 int			splitString(std::string& orig, std::vector<std::string>& tokens, std::string seps);
 char*		ft_strjoinDefsize(char* s1, char* s2, size_t sizes2);
+int			divideFilePath(std::string& path, std::string& dirPath, std::string& filename);
+ssize_t		memFind(const char *mem, size_t memSize, const char *needle, size_t needleSize);
+
 // Template functions
 template <class T>	std::string	itostr(T number);
 

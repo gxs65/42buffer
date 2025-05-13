@@ -6,14 +6,14 @@
 #    By: abedin <abedin@student.42.fr>              +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2025/04/26 15:17:49 by ilevy             #+#    #+#              #
-#    Updated: 2025/05/12 11:59:35 by abedin           ###   ########.fr        #
+#    Updated: 2025/05/13 16:39:42 by abedin           ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
 NAME = webserv
 
 SRCS_FOLDER = cpp_files/
-SRCS_OBJECTS = 	utils1.cpp utils2.cpp \
+SRCS_OBJECTS = 	utils1.cpp utils2.cpp utils3.cpp \
 				main.cpp \
 				Client.cpp Server.cpp \
 				Request.cpp \

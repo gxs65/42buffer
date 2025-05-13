@@ -6,7 +6,7 @@
 /*   By: abedin <abedin@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/30 15:48:28 by ilevy             #+#    #+#             */
-/*   Updated: 2025/05/12 15:00:16 by abedin           ###   ########.fr       */
+/*   Updated: 2025/05/13 18:38:19 by abedin           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -31,9 +31,10 @@ class Request
 		bool				parse(const std::string& raw_request);
 		void				allocateBody();
 		void				appendToBody(char* buffer, size_t bufferSize);
+		int					redirectPath(std::string newPath);
 		void				logRequest();
-		// Static method to check completeness of request
-		static int			containsHeadersEnd(char *lastBuffer, char* buffer, size_t bufferSize);
+		// Static method to check completeness of request headers
+		static ssize_t		containsHeadersEnd(char *lastBuffer, char* buffer, size_t bufferSize);
 		// Memory of server's config
 		t_mainSocket&						_mainSocket;
 		// Storing request body
@@ -44,11 +45,11 @@ class Request
 		// Results of general parsing
 		std::string							_method;
 		std::string							_path;
-		std::string							_filePath; // the path, without path info and query string
 		std::string							_httpVersion;
 		std::map<std::string, std::string>	_headers;
 		bool								_parsed;
 		// Results of specific parsing
+		std::string							_filePath; // the path, without path info and query string
 		std::string							_pathInfo;
 		std::string							_queryString;
 		std::string							_extension;
@@ -57,11 +58,11 @@ class Request
 		std::string							_hostName;
 
 	private:
-		bool			parseFirstLine(const std::string& rawHeaders);
-		bool			parseHeaders(const std::string& rawHeaders);
-		bool			checkHeaders();
-		void			extractFromURL();
-		void			extractFromHost();
+		bool				parseFirstLine(const std::string& rawHeaders);
+		bool				parseHeaders(const std::string& rawHeaders);
+		bool				checkHeaders();
+		void				extractFromURL();
+		void				extractFromHost();
 		
 };
 

@@ -12,9 +12,9 @@
 // 		\ acceptedMethods : names ('GET', 'POST', ...) of allowed request methods for this location
 // 		\ cgiExtensions : list of file extensions associated that require to execute a CGI
 // 		\ uploadPath : absolute path in which uploaded files must be stored
-// 		\ defaultFileWhenDir : path to index file to serve if a GET requests a directory URL
+// 		\ fileWhenDir : path to index file to serve if a GET requests a directory URL
 // 		\ autoIndex : boolean defining wether the server can generate index files itself
-// 			(if set, <defaultFileWhenDir> can't be set)
+// 			(if set, <fileWhenDir> can't be set)
 struct s_location
 {
 	std::string							locationPath;
@@ -25,7 +25,7 @@ struct s_location
 	bool								acceptedMethodsSet;
 	std::vector<std::string>			cgiExtensions;
 	std::string							uploadPath;
-	std::string							defaultFileWhenDir;
+	std::string							fileWhenDir;
 	bool								autoIndex;
 	bool								autoIndexSet;
 };

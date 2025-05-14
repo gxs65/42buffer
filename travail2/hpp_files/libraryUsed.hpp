@@ -6,7 +6,7 @@
 /*   By: abedin <abedin@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/30 15:49:54 by ilevy             #+#    #+#             */
-/*   Updated: 2025/05/06 16:05:33 by abedin           ###   ########.fr       */
+/*   Updated: 2025/05/14 13:42:02 by abedin           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -37,6 +37,7 @@
 // Files and processes control
 # include <fstream>
 # include <fcntl.h>
+# include <dirent.h>
 # include <wait.h>
 # include <sys/types.h>
 # include <sys/stat.h>

@@ -13,6 +13,10 @@ enum ClientState
 };
 
 // Holds the logic handling the interaction with the client on a dedicated socket
+// 		\ the "interaction" with the client is in fact a TCP connection managed by the OS ;
+// 			by default <Client> tries to keep the connection "persistent",
+// 				ie. does not close the connection after having sent a response
+// 			-> go to <handleEvent> and its error values to see what could stop the connection
 // 		\ <preparePollFd>, called by <Server>, defines in the socket's <pollfd> structure
 // 		  which events are awaited on that socket (POLLIN/POLLOUT)
 // 		\ <handleEvent>, called by <Server>, manages events received on the socket
@@ -20,9 +24,9 @@ enum ClientState
 // 				if the <requestBuffer> holds a complete request
 // 				generate its response in <_responseBuffer>
 // 			~ POLLOUT events : write as much bytes as possible from <_responseBuffer> into the socket
-// Registers in its constructor many informations
-// about the socket on which it listens and the server's list of virtual servers
-// 		to be able to determine to which virtual server requests received on the socket are directed 
+// /!\ Constructor takes a lot of parameters because it registers many informations
+// 	   about the socket on which it listens and the server's list of virtual servers
+// 			to be able to determine to which virtual server requests received on the socket are directed
 class	Client
 {
 	public:
@@ -54,6 +58,7 @@ class	Client
 		std::vector<t_vserver>&			_vservers;
 		// Internal state
 		int								_state;
+		int								_closeAfterSent;
 		unsigned long					_nbytesSent;
 		Response*						_response;
 		char*							_responseBuffer;

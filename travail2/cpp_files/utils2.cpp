@@ -82,3 +82,11 @@ int	divideFilePath(std::string& path, std::string& dirPath, std::string& filenam
 	filename = path.substr(ind + 1);
 	return (0);
 }
+
+// Erases the last character in a string
+// (function used for readability, because <s.back()> does not exist in C++98)
+void	eraseLastChar(std::string& s)
+{
+	if (s.size() > 0)
+		s.erase(s.size() - 1);
+}

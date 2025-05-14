@@ -22,6 +22,7 @@ Response::Response(Request* request, t_portaddr clientPortaddr,
 	this->_clientPortaddr = clientPortaddr;
 	this->_vserv = this->identifyVserver(vservers, vservIndexes);
 	this->_location = this->identifyLocation();
+	this->_responseBuffer = NULL;
 }
 
 // Minimal constructor to allow an instance of <Client>
@@ -30,6 +31,10 @@ Response::Response(Request* request, t_portaddr clientPortaddr,
 Response::Response(std::string status)
 {
 	std::cout << "Minimal constructor for Response to request with status " << status << "\n";
+	this->_request = NULL;
+	this->_location = NULL;
+	this->_vserv = NULL;
+	this->_responseBuffer = NULL;
 	this->makeErrorResponse(status);
 }
 
@@ -79,6 +84,8 @@ t_vserver*	Response::identifyVserver(std::vector<t_vserver>& vservers, std::set<
 	bool									portaddrMatch;
 	bool									nameMatch;
 
+	std::cout << "[Res::idVserv] Finding vserver responsible for request with hostName "
+		<< this->_request->_hostName << " received on " << this->_request->_hostPortaddr << "\n";
 	// try matching host description in request with virtual servers
 	for (vservInd = vservIndexes.begin(); vservInd != vservIndexes.end(); vservInd++)
 	{
@@ -99,7 +106,10 @@ t_vserver*	Response::identifyVserver(std::vector<t_vserver>& vservers, std::set<
 			continue;
 		// if portaddr match and no hostName in request, then portaddr match is enough
 		if (this->_request->_hostName.size() == 0)
+		{
+			std::cout << "\tFound portaddr match, no hostName -> vserver is " << vserv << "\n";
 			return (vserv);
+		}
 		// if portaddr match and hostName defined,
 		// then check if hostName matches 1 of the virtual server's name
 		nameMatch = 0;
@@ -113,7 +123,10 @@ t_vserver*	Response::identifyVserver(std::vector<t_vserver>& vservers, std::set<
 			}
 		}
 		if (nameMatch)
+		{
+			std::cout << "\tFound portaddr match + hostName match -> vserver is " << vserv << "\n";
 			return (vserv);
+		}
 	}
 	// when no virtual server matches, return the first server in the list
 	std::cout << "[Res::idVserv] no match found -> returning first possible vserver\n";
@@ -124,8 +137,9 @@ t_vserver*	Response::identifyVserver(std::vector<t_vserver>& vservers, std::set<
 // targeted by the request in <this._request>
 // Loops through the virtual server's locations searching for a match
 // between the location's path and the path given in request ;
-// 		if multiple locations match the one with the longest location path prevails
-// If no match found, returns NULL (a request can target no location)
+// 		\ if location's path ends with '/', this ending '/' is not taken into account for match
+// 		\ if multiple locations match the one with the longest location path prevails
+// 		\ if no match found, returns NULL (a request can target no location)
 // Example : if request path is '/a/b/c.txt', locations are '/a/' '/a/b/' '/a/b/c/',
 // 		then location '/a/b/' will be chosen (longest match)
 t_location*	Response::identifyLocation()
@@ -134,11 +148,14 @@ t_location*	Response::identifyLocation()
 	size_t			bestLength = 0;
 	unsigned int	ind;
 	std::string		locationPath;
+	std::string		filePath;
 
 	bestMatch = NULL;
 	for (ind = 0; ind < this->_vserv->locations.size(); ind++)
 	{
 		locationPath = this->_vserv->locations[ind].locationPath;
+		if (*(locationPath.end() - 1) == '/')
+			eraseLastChar(locationPath);
 		if (this->_request->_filePath.compare(0, locationPath.size(), locationPath) == 0)
 		{
 			if (locationPath.size() > bestLength)
@@ -166,7 +183,7 @@ int	Response::checkResolvedDirPath(std::string& dirPath)
 	char		realDirPath[PATH_MAX];
 
 	if (*(dirPath.end() - 1) == '/')
-		dirPath.erase(dirPath.end() - 1);
+		eraseLastChar(dirPath);
 	if (!realpath(dirPath.c_str(), realDirPath))
 		return (1);
 	if (std::string(realDirPath).find(dirPath) != 0)
@@ -259,7 +276,7 @@ int	Response::buildFullPathFile(std::string& fullPath)
 		fullPath = this->_location->rootPath + this->_request->_filePath;
 	else if (this->_location && !(this->_location->aliasPath.empty()))
 	{
-		if (this->_request->_filePath.size() < this->_location->locationPath.size())
+		if (this->_request->_filePath.size() < this->_location->locationPath.size() - 1)
 			return (1);
 		fullPath = this->_location->aliasPath
 				 + this->_request->_filePath.substr(this->_location->locationPath.size() - 1);
@@ -282,9 +299,10 @@ int	Response::buildFullPathFile(std::string& fullPath)
 // 		\ if <checkFile> is true, check that a regular file exist at the given path
 // 		\ if <checkFile> and <checkExec> are true, check that the file is executable
 // 		\ if <checkFile> is true and <fileSize> is not NULL, stores the file size in <fileSize>
-// Returns 0 normally, 1 if a check failed (impossible to build path, unsafe resolution, absent file)
-// 		and 2 specifically for GET requests if <stat> indicates that path leads to a directory
-// 		instead of a regular file (so that a redirection response to the directory can be generated)
+// Returns 0 when all checks succeed, and
+// 		\ 1 if a check failed (impossible to build path, unsafe resolution, absent file...)
+// 		\ 2 if <stat> indicates that path leads to a directory instead of a regular file
+// 			(designed specifically for GET requests, which might want to generate an index file / redirection)
 int	Response::pathToFile(std::string& fullPath,
 	bool checkFile, bool checkExec, size_t* fileSize)
 {
@@ -310,7 +328,8 @@ int	Response::pathToFile(std::string& fullPath,
 			return (1);
 		if (!S_ISREG(fileStat.st_mode))
 		{
-			std::cout << "\tis not a regular file ; is a directory : " << S_ISDIR(fileStat.st_mode) << "\n";
+			std::cout << "\tis not a regular file ; is a directory : "
+				<< S_ISDIR(fileStat.st_mode) << "\n";
 			if (S_ISDIR(fileStat.st_mode))
 				return (2);
 			else
@@ -343,7 +362,7 @@ void	Response::makeResponseFromString(std::string& responseStr)
 // 		\ if <newPath> is defined, uses this path as the redirected location
 // 		\ if <newPath> is empty (case of a GET request with path to a directory but no trailing '/'),
 // 			uses the <_filePath> of the request with an added '/'
-void	Response::makeRedirResponse(std::string status, std::string newPath)
+int	Response::makeRedirResponse(std::string status, std::string newPath)
 {
 	std::stringstream	ss;
 	std::string			responseStr;
@@ -356,10 +375,11 @@ void	Response::makeRedirResponse(std::string status, std::string newPath)
 		<< "Location: " << newPath << "\r\n\r\n";
 	responseStr = ss.str();
 	this->makeResponseFromString(responseStr);
+	return (0);
 }
 
 // Generates the response for a success without body (eg. for successful upload with POST/PUT)
-void	Response::makeSuccessResponse(std::string status)
+int	Response::makeSuccessResponse(std::string status)
 {
 	std::stringstream	ss;
 	std::string			responseStr;
@@ -369,21 +389,56 @@ void	Response::makeSuccessResponse(std::string status)
 		<< "Content-Length: 0" << "\r\n\r\n";
 	responseStr = ss.str();
 	this->makeResponseFromString(responseStr);
+	return (0);
 }
 
-// Generates the response for an error according to error type given by errcode
-void	Response::makeErrorResponse(std::string status)
+// Generates a very simple error page for error <status>
+int	Response::makeErrorResponseDefault(std::string status)
 {
-	std::stringstream	ss;
-	std::string			responseStr;
+	std::stringstream		ss;
+	std::string				responseStr;
 
-	std::cout << "[Res::Gen] Generating error response status " << status << "\n";
+	std::cout << "[Res::Gen] Generating default error page with error " << status << "\n";
 	ss << "HTTP/1.1 " << status << "\r\n"
 		<< "Content-Length: " << (status.size() + 12) << "\r\n"
 		<< "Content-Type: text/html\r\n\r\n"
 		<< "<html>" << status << "</html>";
 	responseStr = ss.str();
 	this->makeResponseFromString(responseStr);
+	return (0);
+}
+
+// Generates the response for an error : splits the <status> string,
+// retrieves the error code in its first token,
+// then tries to redirect to the error page defined by cfg file :
+// 		\ virtual server must be defined and have a root path
+// 		\ virtual server must have an error page for <code> in its map <errorPages>
+// 		\ the error page file must exist and be regular
+// If a check fails, instead generates an default simple error page
+int	Response::makeErrorResponse(std::string status)
+{
+	std::vector<std::string>	tokens;
+	int							code;
+	struct stat					fileStat;
+	std::string					pagePath;
+
+	std::cout << "[Res::Gen] Handling error : " << status << "\n";
+	splitString(status, tokens, " ");
+	if (this->_request && this->_vserv && !(this->_vserv->rootPath.empty())
+		&& tokens.size() > 0 && !invalidReturnCode(tokens[0]))
+	{
+		code = static_cast<int>(strtol(tokens[0].c_str(), NULL, 10));
+		if (this->_vserv->errorPages.count(code) > 0)
+		{
+			pagePath = this->_vserv->rootPath + "/" + this->_vserv->errorPages[code];
+			if (stat(pagePath.c_str(), &fileStat) == 0 && S_ISREG(fileStat.st_mode))
+			{
+				this->_request->redirectPath("/" + this->_vserv->errorPages[code]);
+				return (2);
+			}
+		}
+	}
+	return (this->makeErrorResponseDefault(status));
 }
 
 ///////////////////////
@@ -451,9 +506,6 @@ int	Response::produceResponse(void)
 		else if (this->_request->_method == "DELETE")
 			return (this->handleDelete());
 		else
-		{
-			this->makeErrorResponse("501 Not Implemented");
-			return (0);
-		}
+			return (this->makeErrorResponse("501 Not Implemented"));
 	}
 }

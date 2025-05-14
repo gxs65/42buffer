@@ -21,6 +21,7 @@ Client::Client(int socketFd, t_portaddr clientPortaddr,
 	std::cout << "\t(dedicated socket has fd " << this->_socketFd << " ; main socket had fd "
 		<< this->_mainSocket.fd << " listening on " << this->_mainSocket.portaddr << ")\n";
 	this->_state = RECEIVING;
+	this->_closeAfterSent = 0;
 	this->_clientPortAddr = clientPortaddr;
 	this->_response = NULL;
 	this->_request = NULL;
@@ -71,13 +72,22 @@ void	Client::preparePollFd(struct pollfd& pfd)
 
 // Redirects an event received on the socket of this client to the correct method
 // (apparently event POLLHUP is never received for sockets)
+// Return value may be 0 for success, or
+// 		\ 1 : fatal error encountered either by <Client> (recv/sendv)
+// 			or by its instance of <Response> (should never happen, see <handleCompleteRequest>)
+// 		\ 2 : unable to continue the connection, because either
+// 			~ the client on the other side of the TCP connection hung up
+// 				<=> (POLLHUP event, or POLLIN event while nothing to read)
+// 			~ the received request bytes are malformed in such a way
+// 			  that it compromises the parsing of further requests
+// 				(notably if headers are unreadable -> <Client> cannot know if there is a body)
 int		Client::handleEvent(struct pollfd& pfd)
 {
 	if ((pfd.revents & POLLIN) && this->_state == RECEIVING)
 		return (this->receiveHTTP());
 	if ((pfd.revents & POLLOUT) && this->_state == SENDING)
 		return (this->sendHTTP());
-	if (pfd.revents & POLLHUP && this->_state != RECEIVING)
+	if (((pfd.revents & POLLHUP) || (pfd.events & POLLERR)))
 	{
 		std::cout << "\t\t[CH::handleEvent] hangup from client with socket at fd " << this->_socketFd << "\n";
 		return (2);
@@ -108,6 +118,8 @@ void	Client::passToReceiving()
 // 		if all data is sent then puts this instance of <Client> back in RECEIVING mode
 // 		(by emptying the buffers and destroying the instances of <Response> and <Request>,
 // 			which frees all memory that those instances allocated)
+// Returns 0 for success, 1 in case of <send> error, 2 if <_closeAfterSent> is true
+// 		(case where an error response had to be sent to the client before closing the connection)
 // The socket may be too small to accept the full <_responseBuffer> in one <send>,
 // 		so the progress in number of bytes sent is registered in <_nBytesSent>
 // 			-> the next bytes in <_responseBuffer> wait for the next call to <sendHTTP> to be sent
@@ -128,7 +140,10 @@ int		Client::sendHTTP(void)
 	if (this->_nbytesSent >= this->_responseSize)
 	{
 		std::cout << "\t\t[CH::sendHTTP] full response sent\n";
-		this->passToReceiving();
+		if (this->_closeAfterSent)
+			return (logError("[CH::sendHTTP] closing after having sent error response", 0), 2);
+		else
+			this->passToReceiving();
 	}
 	return (0);
 }
@@ -160,8 +175,8 @@ void	Client::passToSending()
 // but this never happens in current implementation : errors when producing response are either
 // 		\ client errors (invalid path, forbidden method) -> generates response with code 400
 // 		\ system calls errors of <open>/<read>/<pipe>... -> generates response with code 500
-// <=> even system call errors are not considered fatal to the server,
-// 	   in order to keep it operational for other clients
+// <=> even with system call errors, the server and this connection are maintained running,
+// 	   to respect the principle "server should remain available at all times"
 int	Client::handleCompleteRequest(int recurrLvl)
 {
 	int		responseRet;
@@ -190,11 +205,16 @@ int	Client::handleCompleteRequest(int recurrLvl)
 }
 
 // Creates a <Response> instance with minimal initialisation
-// since it only has to generate the HTTP response for an error
-// then puts this instance of <Client> into sending mode
+// since it only has to generate the HTTP response for an error (400/500)
+// encountered by this instance of <Client>
+// Then puts this instance of <Client> into SENDING mode,
+// and sets <_closeAfterSent> so that, after the response is sent,
+// the connection is closed instead of going back to RECEIVING mode
+// 		(<=> renounce to persistence of connection because error compromises future handling of requests)
 void	Client::handleProblematicRequest(std::string status)
 {
 	this->_response = new Response(status);
+	this->_closeAfterSent = 1;
 	this->passToSending();
 }
 
@@ -214,6 +234,9 @@ void	Client::handleProblematicRequest(std::string status)
 // 		\ condition `indHeadersEnd == bufferSize - 1 && bodySize > 0` handles cases where separator
 // 		  is at the end of buffer, so there is nothing left in buffer to append to body
 // 			(except in the edge case where body size is 0, then <receiveBodyPart> must be called to complete request)
+// 		\ in case of unreadable headers (<Request.parse> returns 1), the connection must be closed
+// 		  after the response '400' has been sent. since now the server is desynchronized from client :
+// 			header "Content-Length" is unknown, so there is no way to know where the body ends
 int	Client::finishRequestHeaders(char *buffer, size_t bufferSize, ssize_t indHeadersEnd)
 {
 	char	bufferRemaining[READSOCK_BUFFER_SIZE + 1];

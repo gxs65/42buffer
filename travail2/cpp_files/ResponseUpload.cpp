@@ -33,12 +33,12 @@ int	Response::uploadFile(std::string& fullPath, unsigned long fileSize,
 	bool		fileExists;
 
 	if (fileSize > FILEUPLOAD_MAXSIZE)
-		return (this->makeErrorResponse("413 Content Too Large"), 0);
+		return (this->makeErrorResponse("413 Content Too Large"));
 	fileExists = (access(fullPath.c_str(), F_OK) == 0);
 	std::cout << "\tuploading file to " << fullPath
 		<< "\n\tfile already existed : " << fileExists << "\n";
 	if (this->writeFullBufferInFile(fullPath, fileSize, fileContent))
-		return (this->makeErrorResponse("500 Internal Server Error (system call)"), 0);
+		return (this->makeErrorResponse("500 Internal Server Error (system call)"));
 	std::cout << "\tfile upload done\n";
 	if (makeResponse)
 	{
@@ -116,7 +116,10 @@ void	Response::divideMultipart(std::string& dirPath, char* boundary, size_t boun
 
 	ind1 = memFind(body, bodySize, boundary, boundarySize);
 	if (ind1 == -1)
-		return (this->makeErrorResponse("400 Bad Request (multipart body without boundary occurrence)"));
+	{
+		this->makeErrorResponse("400 Bad Request (multipart body without boundary occurrence)");
+		return ;
+	}
 	while (ind1 != -1)
 	{
 		ind2 = memFind(body + ind1 + boundarySize, bodySize - ind1 - boundarySize, boundary, boundarySize);
@@ -149,14 +152,14 @@ int	Response::handlePostMultipart()
 
 	std::cout << "\tchecks on POST request with multipart content\n";
 	if (!(this->_request->_toDir))
-		return (this->makeErrorResponse("403 Forbidden (multipart upload path with filename)"), 0);
+		return (this->makeErrorResponse("403 Forbidden (multipart upload path with filename)"));
 	if (!(this->_location) || this->_location->uploadPath.empty())
-		return (this->makeErrorResponse("403 Forbidden (upload not allowed by location)"), 0);
+		return (this->makeErrorResponse("403 Forbidden (upload not allowed by location)"));
 	if (this->pathToUpload(dirPath, 1))
-		return (this->makeErrorResponse("404 Not Found (invalid upload path)"), 0);
+		return (this->makeErrorResponse("404 Not Found (invalid upload path)"));
 	boundary = this->extractMultipartBoundary(boundarySize);
 	if (!boundary)
-		return (this->makeErrorResponse("400 Bad Request (no multipart boundary)"), 0);
+		return (this->makeErrorResponse("400 Bad Request (no multipart boundary)"));
 
 	this->divideMultipart(dirPath, boundary, boundarySize);
 	delete[] boundary;
@@ -173,11 +176,11 @@ int	Response::handlePostRaw()
 
 	std::cout << "\tchecks on POST request uploading raw file\n";
 	if (this->_request->_toDir)
-		return (this->makeErrorResponse("403 Forbidden (upload with no filename)"), 0);
+		return (this->makeErrorResponse("403 Forbidden (upload with no filename)"));
 	if (!(this->_location) || this->_location->uploadPath.empty())
-		return (this->makeErrorResponse("403 Forbidden (upload not allowed by location)"), 0);
+		return (this->makeErrorResponse("403 Forbidden (upload not allowed by location)"));
 	if (this->pathToUpload(fullPath, 0))
-		return (this->makeErrorResponse("404 Not Found (invalid upload path)"), 0);
+		return (this->makeErrorResponse("404 Not Found (invalid upload path)"));
 	return (this->uploadFile(fullPath, this->_request->_bodySize, this->_request->_body, 1));
 }
 
@@ -190,7 +193,7 @@ int	Response::handlePostRaw()
 int	Response::handlePost()
 {
 	if (this->_request->_headers.count("Content-Type") == 0)
-		return (this->makeErrorResponse("400 Bad Request (no content type)"), 0);
+		return (this->makeErrorResponse("400 Bad Request (no content type)"));
 	if (this->_request->_headers["Content-Type"].compare(0, 19, "multipart/form-data") == 0)
 		return (this->handlePostMultipart());
 	else
@@ -208,15 +211,15 @@ int	Response::handleDelete()
 
 	std::cout << "\tchecks on DELETE\n";
 	if (this->_request->_toDir)
-		return (this->makeErrorResponse("403 Deleting Directory Forbidden"), 0);
+		return (this->makeErrorResponse("403 Deleting Directory Forbidden"));
 	if (this->pathToFile(fullPath, 1, 0, NULL)) // #f : invalidated
-		return (this->makeErrorResponse("404 Not Found"), 0);
+		return (this->makeErrorResponse("404 Not Found"));
 	fileExists = (access(fullPath.c_str(), F_OK) == 0);
 	std::cout << "\tchecks ended ; file exists : " << fileExists << "\n";
 	if (!fileExists)
-		return (this->makeErrorResponse("500 Internal Server Error"), 0);
+		return (this->makeErrorResponse("500 Internal Server Error"));
 	if (remove(fullPath.c_str()))
-		return (this->makeErrorResponse("500 Internal Server Error"), 0);
+		return (this->makeErrorResponse("500 Internal Server Error"));
 	std::cout << "\tfile successfully deleted\n";
 	this->makeSuccessResponse("500 Internal Server Error");
 	return (0);

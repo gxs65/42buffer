@@ -265,6 +265,9 @@ int		Server::serverLoop(void)
 // 			which will in turn call the handling method of corresponding <clientHandler> instance
 // 		\ <handleNewConnection> if socket is main socket
 // 			<=> the connection is new and requires a call to <accept> on this main socket
+// <handleOldConnection>'s return value is checked but should never be 1,
+// since error on clients are ignored (the connection with the client is simply stopped)
+// in order to maintain server running
 int		Server::goThroughEvents(struct pollfd* pfds, unsigned int nfds)
 {
 	unsigned int	socketInd;
@@ -286,17 +289,20 @@ int		Server::goThroughEvents(struct pollfd* pfds, unsigned int nfds)
 }
 
 // Redirects event on dedicated socket to the corresponding <clientHandler> instance,
-// 		and uses its return value to check if the connection to this client was closed
-// 		so the instance must be freed and the pointer to the instance removed from <_clientHandlers>
+// and uses its return value to check if
+// 		\ return value 1 : a fatal error occurred on the connection
+// 		\ return value 2 : the connection must be ended because of client hangup or malformed request
+// -> in both cases, <ClientHandler> instance must be freed
+// and the pointer to the instance removed from <_clientHandlers>
+// /!\ Fatal errors in the Client are not fatal to the Server,
+// 	   to respect the principle "server should remain available at all times"
 int		Server::handleOldConnection(unsigned int socketInd, struct pollfd& pfd)
 {
 	int				ret;
 	unsigned int	clientInd = socketInd - this->_mainSockets.size();
 
 	ret = this->_clientHandlers[clientInd]->handleEvent(pfd);
-	if (ret == 1)
-		return (1);
-	if (ret == 2)
+	if (ret == 1 || ret == 2)
 	{
 		delete this->_clientHandlers[clientInd];
 		this->_clientHandlers[clientInd] = NULL;

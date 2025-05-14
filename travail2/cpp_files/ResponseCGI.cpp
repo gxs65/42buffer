@@ -15,14 +15,14 @@ int		Response::generateCGIResponseClientRedirect(std::map<std::string, std::stri
 
 	std::cout << "\t-> generating response for client redirect, without document\n";
 	if (cgiHeaders.size() > 1 || this->_cgiOutputBody.size() > 0)
-		return (this->makeErrorResponse("500 Internal Server Error (CGI output credir with non-Location headers)"), 0);
+		return (this->makeErrorResponse("500 Internal Server Error (CGI output credir with non-Location headers)"));
 	if (statusCode.empty())
 	{
 		statusCode = "302";
 		statusDesc = "Found";
 	}
 	else if (statusCode != "302")
-		return (this->makeErrorResponse("500 Internal Server Error (CGI output credir without code 302)"), 0);
+		return (this->makeErrorResponse("500 Internal Server Error (CGI output credir without code 302)"));
 
 	ss << "HTTP/1.1 " << statusCode << " " << statusDesc << "\r\n"
 		<< "Content-Length: 0" << "\r\n"
@@ -48,9 +48,9 @@ int		Response::generateCGIResponseLocalRedirect(std::map<std::string, std::strin
 	(void)statusCode; (void)statusDesc;
 	std::cout << "\t-> generating response for local redirect to " << newPath << "\n";
 	if (cgiHeaders.size() > 1 || this->_cgiOutputBody.size() > 0)
-		return (this->makeErrorResponse("500 Internal Server Error (CGI output lredir with non-Location headers)"), 0);
+		return (this->makeErrorResponse("500 Internal Server Error (CGI output lredir with non-Location headers)"));
 	if (this->_request->redirectPath(newPath))
-		return (this->makeErrorResponse("500 Internal Server Error (CGI output lredir with invalid new path)"), 0);
+		return (this->makeErrorResponse("500 Internal Server Error (CGI output lredir with invalid new path)"));
 	return (2);
 }
 
@@ -108,14 +108,14 @@ int		Response::generateCGIResponseClientRedirectDoc(std::map<std::string, std::s
 {
 	std::cout << "\t-> generating response for client redirect, with document\n";
 	if (this->checkCGIOutputBody(cgiHeaders))
-		return (this->makeErrorResponse("500 Internal Server Error (CGI output unreadable)"), 0);
+		return (this->makeErrorResponse("500 Internal Server Error (CGI output unreadable)"));
 	if (statusCode.empty())
 	{
 		statusCode = "302";
 		statusDesc = "Found";
 	}
 	else if (statusCode != "302")
-		return (this->makeErrorResponse("500 Internal Server Error (CGI output credirdoc without code 302)"), 0);
+		return (this->makeErrorResponse("500 Internal Server Error (CGI output credirdoc without code 302)"));
 	return (this->generateCGIResponseWithDoc(cgiHeaders, statusCode, statusDesc));
 }
 
@@ -127,7 +127,7 @@ int		Response::generateCGIResponseNoredir(std::map<std::string, std::string>& cg
 {
 	std::cout << "\t-> generating response without redirect, body of size " << this->_cgiOutputBody.size() << "\n";
 	if (this->checkCGIOutputBody(cgiHeaders))
-		return (this->makeErrorResponse("500 Internal Server Error (CGI output unreadable)"), 0);
+		return (this->makeErrorResponse("500 Internal Server Error (CGI output unreadable)"));
 	if (statusCode.empty())
 	{
 		statusCode = "200";
@@ -295,14 +295,14 @@ int	Response::processCGIOutput()
 
 	logCGIOutput(this->_cgiOutput);
 	if (this->parseCGIHeaders(cgiHeaders, statusCode, statusDesc))
-		return (this->makeErrorResponse("500 Internal Server Error (CGI output unreadable)"), 0);
+		return (this->makeErrorResponse("500 Internal Server Error (CGI output unreadable)"));
 	std::cout << "\textracted headers string from CGI output :\n";
 	logCGIHeaders(cgiHeaders, statusCode, statusDesc, this->_cgiOutputBody);
 
 	if (cgiHeaders.count("Location") == 1)
 	{
 		if (cgiHeaders["Location"].size() == 0)
-			return (this->makeErrorResponse("500 Internal Server Error (CGI output unreadable)"), 0);
+			return (this->makeErrorResponse("500 Internal Server Error (CGI output unreadable)"));
 		else if (this->_cgiOutputBody.size() > 0)
 			return (this->generateCGIResponseClientRedirectDoc(cgiHeaders, statusCode, statusDesc));
 		else if (cgiHeaders["Location"][0] == '/')
@@ -491,7 +491,7 @@ int		Response::waitForChildCGI(pid_t pid, int *pipeRequest, int *pipeResponse)
 		{
 			waitpid(pid, &exitStatus, 0);
 			std::cout << "\tError: unable to feed body to CGI program\n";
-			return (this->makeErrorResponse("500 Internal Server Error (system call)"), 0);
+			return (this->makeErrorResponse("500 Internal Server Error (system call)"));
 		}
 	}
 	else
@@ -500,7 +500,7 @@ int		Response::waitForChildCGI(pid_t pid, int *pipeRequest, int *pipeResponse)
 	{
 		waitpid(pid, &exitStatus, 0);
 		std::cout << "\tError: unable to read response from CGI program\n";
-		return (this->makeErrorResponse("500 Internal Server Error (system call)"), 0);
+		return (this->makeErrorResponse("500 Internal Server Error (system call)"));
 	}
 	waitpid(pid, &exitStatus, 0);
 	if (WIFEXITED(exitStatus))
@@ -508,12 +508,12 @@ int		Response::waitForChildCGI(pid_t pid, int *pipeRequest, int *pipeResponse)
 	else
 	{
 		std::cout << "\tError: CGI program did not exit\n";
-		return (this->makeErrorResponse("500 Internal Server Error (system call)"), 0);
+		return (this->makeErrorResponse("500 Internal Server Error (system call)"));
 	}
 	if (exitStatus == 127)
 	{
 		std::cout << "\tError: CGI program could not be executed\n";
-		return (this->makeErrorResponse("500 Internal Server Error (system call)"), 0);
+		return (this->makeErrorResponse("500 Internal Server Error (system call)"));
 	}
 	std::cout << "\t[Res::CGI] CGI program terminated with exit status " << exitStatus << "\n";
 	return (this->processCGIOutput());
@@ -531,14 +531,14 @@ int		Response::forkCGI(std::string& fullPath)
 
 	if (pipe(pipeRequest) == -1)
 		return (logError("Error: unable to create pipe for CGI\n", 1),
-			this->makeErrorResponse("500 Internal Server Error (system call)"), 0);
+			this->makeErrorResponse("500 Internal Server Error (system call)"));
 	if (pipe(pipeResponse) == -1)
 		return (logError("Error: unable to create pipe for CGI\n", 1),
-			this->makeErrorResponse("500 Internal Server Error (system call)"), 0);
+			this->makeErrorResponse("500 Internal Server Error (system call)"));
 	pid = fork();
 	if (pid == -1)
 		return (logError("Error: unable to fork child for CGI\n", 1),
-			this->makeErrorResponse("500 Internal Server Error (system call)"), 0);
+			this->makeErrorResponse("500 Internal Server Error (system call)"));
 	else if (pid == 0)
 	{
 		close(pipeRequest[1]);
@@ -570,8 +570,8 @@ int	Response::handleCGI()
 	std::string	fullPath;
 
 	if (this->_request->_toDir)
-		return (this->makeErrorResponse("404 Not Found (CGI to a directory)"), 0);
+		return (this->makeErrorResponse("404 Not Found (CGI to a directory)"));
 	if (this->pathToFile(fullPath, 1, 1, NULL))
-		return (this->makeErrorResponse("404 Not Found (CGI executable not found)"), 0);
+		return (this->makeErrorResponse("404 Not Found (CGI executable not found)"));
 	return (this->forkCGI(fullPath));
 }

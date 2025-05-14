@@ -151,7 +151,7 @@ void	logLocation(t_location& l)
 		<< "\n\t\trootPath : " << l.rootPath
 		<< "\n\t\taliasPath : " << l.aliasPath
 		<< "\n\t\tuploadPath : " << l.uploadPath
-		<< "\n\t\tdefaultFileWhenDir : " << l.defaultFileWhenDir
+		<< "\n\t\tfileWhenDir : " << l.fileWhenDir
 		<< "\n\t\tautoindex : " << l.autoIndex << "\n";
 	std::cout << "\t\taccepted methods : ";
 	for (it1 = l.acceptedMethods.begin(); it1 != l.acceptedMethods.end(); it1++)
@@ -207,7 +207,7 @@ void	initLocation(t_location& l)
 	l.rootPath = "";
 	l.aliasPath = "";
 	l.uploadPath = "";
-	l.defaultFileWhenDir = "";
+	l.fileWhenDir = "";
 	l.autoIndex = 0;
 	l.autoIndexSet = 0;
 	l.acceptedMethods.insert("GET"); // #f : check default value
@@ -235,10 +235,10 @@ int	invalidLocationParams(t_location& l)
 {
 	if (l.redirection.size() > 0
 		&& (l.rootPath.size() > 0 || l.aliasPath.size() > 0 || l.uploadPath.size() > 0
-			|| l.defaultFileWhenDir.size() > 0 || l.autoIndexSet
+			|| l.fileWhenDir.size() > 0 || l.autoIndexSet
 			|| l.cgiExtensions.size() > 0 || l.acceptedMethodsSet))
 		return (logError("[loca] redirection with other parameters is invalid\n", 0));
-	if (l.autoIndex && l.defaultFileWhenDir.size() > 0)
+	if (l.autoIndex && l.fileWhenDir.size() > 0)
 		return (logError("[loca] autoindex ON while default file set is invalid\n", 0));
 	if (l.aliasPath.size() > 0 && l.rootPath.size() > 0)
 		return (logError("[loca] root path and alias path both defined\n", 0));
@@ -279,7 +279,7 @@ int parseLineLocation(std::string& line, std::ifstream& inStream, void* storage)
 		if (tokens.size() != 2 || location->rootPath.size() != 0)
 			return (logError("[loca] invalid 'root' directive\n", 0));
 		if (tokens[1][tokens[1].size() - 1] == '/')
-			tokens[1].erase(tokens[1].end() - 1);
+			eraseLastChar(tokens[1]);
 		location->rootPath = tokens[1];
 	}
 	else if (tokens[0].compare("alias") == 0)
@@ -287,7 +287,7 @@ int parseLineLocation(std::string& line, std::ifstream& inStream, void* storage)
 		if (tokens.size() != 2 || location->aliasPath.size() != 0)
 			return (logError("[loca] invalid 'alias' directive\n", 0));
 		if (tokens[1][tokens[1].size() - 1] == '/')
-			tokens[1].erase(tokens[1].end() - 1);
+			eraseLastChar(tokens[1]);
 		location->aliasPath = tokens[1];
 	}
 	else if (tokens[0].compare("upload") == 0)
@@ -299,15 +299,15 @@ int parseLineLocation(std::string& line, std::ifstream& inStream, void* storage)
 		else
 		{
 			if (tokens[1][tokens[1].size() - 1] == '/')
-				tokens[1].erase(tokens[1].end() - 1);
+				eraseLastChar(tokens[1]);
 			location->uploadPath = tokens[1];
 		}
 	}
 	else if (tokens[0].compare("index") == 0)
 	{
-		if (tokens.size() != 2 || location->defaultFileWhenDir.size() != 0)
+		if (tokens.size() != 2 || location->fileWhenDir.size() != 0)
 			return (logError("[loca] invalid 'index' directive\n", 0));
-		location->defaultFileWhenDir = tokens[1];
+		location->fileWhenDir = tokens[1];
 	}
 	else if (tokens[0].compare("autoindex") == 0)
 	{
@@ -352,6 +352,7 @@ int parseLineLocation(std::string& line, std::ifstream& inStream, void* storage)
 
 // Checks if there are incompatibilities in a server block
 // 		\ there can't be two location blocks with the same location path
+// 		\ if error pages are defined, a root path must be defined
 int	invalidVserverParameters(t_vserver& vs)
 {
 	unsigned int		ind1;
@@ -365,6 +366,8 @@ int	invalidVserverParameters(t_vserver& vs)
 				return (logError("[serv] multiple location blocks with same path is invalid", 0));
 		}
 	}
+	if (vs.errorPages.size() > 0 && vs.rootPath.empty())
+		return (logError("[serv] error pages defined without root path", 0));
 	return (0);
 }
 
@@ -377,6 +380,10 @@ int	invalidVserverParameters(t_vserver& vs)
 // 			(validity of port number checked by our function, validity of IP checked by <inet_aton>)
 // 		\ 'error page' directive must at least contain the path to the error page (last word)
 // 			and 1 (or more) error codes leading to that error page
+// /!\ Interpretation of line `vserv->locations.push_back(location);` :
+// 	   this DOES create a new (dynamically allocated) instance of <t_location>,
+// 			since <vserv.locations> is a vector of <t_location> and not of <t_location*>
+// 	   (also applies to the appending a <t_vserver> to the list of virtual servers)
 int parseLineServ(std::string& line, std::ifstream& inStream, void* storage)
 {
 	t_vserver*							vserv;
@@ -454,7 +461,7 @@ int parseLineServ(std::string& line, std::ifstream& inStream, void* storage)
 		if (tokens.size() != 2 || vserv->rootPath.size() != 0)
 			return (logError("[serv] invalid 'root' directive", 0));
 		if (tokens[1][tokens[1].size() - 1] == '/')
-			tokens[1].erase(tokens[1].end() - 1);
+			eraseLastChar(tokens[1]);
 		vserv->rootPath = tokens[1];
 	}
 	else

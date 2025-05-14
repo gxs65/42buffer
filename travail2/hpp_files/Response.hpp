@@ -47,6 +47,7 @@ class Response
 		unsigned long		_responseSize;
 		std::vector<char>	_cgiOutput;
 		std::vector<char>	_cgiOutputBody;
+		int					_throughErrorResponse;
 		// Identify virtual server targeted by request
 		t_vserver*			identifyVserver(std::vector<t_vserver>& vservers, std::set<int>& vservIndexes);
 		t_location*			identifyLocation();
@@ -88,14 +89,14 @@ class Response
 		bool				isCGIRequest();
 		// Generic responses
 		void				makeResponseFromString(std::string& responseStr);
-		void				makeRedirResponse(std::string status, std::string newPath);
-		void				makeSuccessResponse(std::string status);
-		void				makeErrorResponse(std::string status);
+		int					makeRedirResponse(std::string status, std::string newPath);
+		int					makeSuccessResponse(std::string status);
+		int					makeErrorResponseDefault(std::string status);
+		int					makeErrorResponse(std::string status);
 		// Handle GET (non-CGI)
 		int					readFullFileInBuffer(std::string& fullPath, size_t fileSize, char* buffer);
-		int					makeFileResponse(std::string& fullPath, size_t fileSize);
+		int					makeFileResponse(std::string& fullPath, size_t fileSize, std::string status);
 		std::string			getResponseBodyType();
-		int					handleGetOnDir();
 		int					handleGet();
 		// Handle POST/PUT/DELETE (non-CGI)
 		int					writeFullBufferInFile(std::string& fullPath, size_t bufferSize, char *buffer);
@@ -107,6 +108,11 @@ class Response
 		int					handlePostRaw();
 		int					handlePost();
 		int					handleDelete();
+		// Handle GET on directories
+		int					generateDefaultIndexHtml(std::string& fullPath, std::string& body);
+		int					makeAutoindexResponse(std::string& fullPath);
+		int					handleGetOnDir();
+
 
 };
 

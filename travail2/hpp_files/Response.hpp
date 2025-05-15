@@ -23,6 +23,13 @@
 # define READFILE_BUFFER_SIZE 1024UL
 # define WRITEFILE_BUFFER_SIZE 1024UL
 
+// <Response> is the main class responsible for "server logic", ie. serving resources to client :
+// 		\ it gets (a pointer to) the <Request> instance created by <Client>,
+// 			and determines the virtual server and location that must handle it
+// 		\ it creates in method <produceResponse> the response to that request,
+// 			accepting GET / POST / DELETE / (PUT)
+// 		\ it handles CGI requests using fork and pipes
+
 class Response
 {
 	public:
@@ -86,7 +93,6 @@ class Response
 		int					waitForChildCGI(pid_t pid, int* pipeRequest, int* pipeResponse);
 		int					forkCGI(std::string& fullPath);
 		int					handleCGI();
-		bool				isCGIRequest();
 		// Generic responses
 		void				makeResponseFromString(std::string& responseStr);
 		int					makeRedirResponse(std::string status, std::string newPath);
@@ -112,7 +118,9 @@ class Response
 		int					generateDefaultIndexHtml(std::string& fullPath, std::string& body);
 		int					makeAutoindexResponse(std::string& fullPath);
 		int					handleGetOnDir();
-
+		// Produce response
+		int					handleNotCGI(void);
+		bool				isCGIRequest();
 
 };
 

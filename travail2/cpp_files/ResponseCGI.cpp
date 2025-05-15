@@ -49,7 +49,7 @@ int		Response::generateCGIResponseLocalRedirect(std::map<std::string, std::strin
 	std::cout << "\t-> generating response for local redirect to " << newPath << "\n";
 	if (cgiHeaders.size() > 1 || this->_cgiOutputBody.size() > 0)
 		return (this->makeErrorResponse("500 Internal Server Error (CGI output lredir with non-Location headers)"));
-	if (this->_request->redirectPath(newPath))
+	if (this->_request->redirectPath(newPath, ""))
 		return (this->makeErrorResponse("500 Internal Server Error (CGI output lredir with invalid new path)"));
 	return (2);
 }

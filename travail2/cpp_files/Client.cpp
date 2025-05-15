@@ -307,28 +307,25 @@ int	Client::receiveHeadersPart(char *buffer, size_t bufferSize)
 // 		<=> bytes belong to request body, so they are passed to <this->_request>
 // If enough bytes were received to complete the body, <handleCompleteRequest> called,
 // 		otherwise this instance of <Client> will simply wait for other POLLIN on socket
+// <Request.appendToBody>'s return values are 1/2 for "all body received", 0 for "body unfinished",
+// 		and 3 for an error on chunked body
 int	Client::receiveBodyPart(char* buffer, size_t bufferSize)
 {
-	if (this->_request->_nReceivedBodyBytes + bufferSize == this->_request->_bodySize)
+	int		ret;
+
+	if (bufferSize == 0)
+		return (this->_request->_bodySize == 0);
+	std::cout << "\t\t[CH::receiveHTTP] Appending " << bufferSize << " bytes to body\n";
+	ret = this->_request->appendToBody(buffer, bufferSize);
+	if (ret == 3)
 	{
-		std::cout << "\t\t[CH::receiveHTTP] Received just enough bytes to complete body ("
-			<< this->_request->_bodySize << " / " << this->_request->_bodySize << ")\n";
-		this->_request->appendToBody(buffer, bufferSize);
-		return (this->handleCompleteRequest(0));
+		this->handleProblematicRequest("400 Bad Request (incoherent chunks)");
+		return (0);
 	}
-	else if (this->_request->_nReceivedBodyBytes + bufferSize > this->_request->_bodySize)
-	{
-		std::cout << "\t\t[CH::receiveHTTP] (Warning) Received more than enough bytes received for body\n";
-		this->_request->appendToBody(buffer, this->_request->_bodySize - this->_request->_nReceivedBodyBytes);
+	else if (ret == 1 || ret == 2)
 		return (this->handleCompleteRequest(0));
-	}
 	else
-	{
-		std::cout << "\t\t[CH::receiveHTTP] Received bytes for body, still not complete ("
-			<< this->_request->_nReceivedBodyBytes + bufferSize << " / " << this->_request->_bodySize << ")\n";
-		this->_request->appendToBody(buffer, bufferSize);
-	}
-	return (0);
+		return (0);
 }
 
 // On POLLIN event, reads bytes from the socket into a <buffer>,

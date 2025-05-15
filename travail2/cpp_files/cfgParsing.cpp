@@ -199,7 +199,7 @@ void	logWebservConf(std::vector<t_vserver> vservers)
 }
 
 // Sets default values for 1 location in a virtual server :
-// 		all information empty, except that 'GET' method is accepted by default
+// 		all information empty, except that (only) 'GET' method is accepted by default
 void	initLocation(t_location& l)
 {
 	l.locationPath = "";
@@ -210,7 +210,7 @@ void	initLocation(t_location& l)
 	l.fileWhenDir = "";
 	l.autoIndex = 0;
 	l.autoIndexSet = 0;
-	l.acceptedMethods.insert("GET"); // #f : check default value
+	l.acceptedMethods.insert("GET");
 	l.acceptedMethodsSet = 0;
 }
 
@@ -219,7 +219,7 @@ void	initLocation(t_location& l)
 void	initVserver(t_vserver& vs)
 {
 	vs.listenSet = 0;
-	vs.maxRequestBodySize = std::numeric_limits<long>::max();
+	vs.maxRequestBodySize = std::numeric_limits<unsigned long>::max();
 	vs.rootPath = "";
 }
 
@@ -433,9 +433,9 @@ int parseLineServ(std::string& line, std::ifstream& inStream, void* storage)
 	}
 	else if (tokens[0].compare("client_max_body_size") == 0)
 	{
-		if (tokens.size() != 2 || vserv->maxRequestBodySize != std::numeric_limits<long>::max())
+		if (tokens.size() != 2 || vserv->maxRequestBodySize != std::numeric_limits<unsigned long>::max())
 			return (logError("[serv] invalid 'client_max_body_size' directive", 0));
-		vserv->maxRequestBodySize = strtol(tokens[1].c_str(), NULL, 10);
+		vserv->maxRequestBodySize = strtoul(tokens[1].c_str(), NULL, 10);
 	}
 	else if (tokens[0].compare("error_page") == 0)
 	{
@@ -446,6 +446,8 @@ int parseLineServ(std::string& line, std::ifstream& inStream, void* storage)
 			if (invalidReturnCode(tokens[ind]))
 				return (logError("[serv] invalid value for 'error_page' directive", 0));
 			returnCode = static_cast<int>(strtol(tokens[ind].c_str(), NULL, 10));
+			if (returnCode >= 500 && returnCode <= 599) // codes indicating 'server error' can't have an error page
+				return (logError("[serv] invalid value for 'error_page' directive", 0));
 			vserv->errorPages.insert(std::pair<int, std::string>(returnCode, tokens[tokens.size() - 1]));
 		}
 	}

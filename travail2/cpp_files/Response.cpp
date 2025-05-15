@@ -142,6 +142,7 @@ t_vserver*	Response::identifyVserver(std::vector<t_vserver>& vservers, std::set<
 // 		\ if no match found, returns NULL (a request can target no location)
 // Example : if request path is '/a/b/c.txt', locations are '/a/' '/a/b/' '/a/b/c/',
 // 		then location '/a/b/' will be chosen (longest match)
+// [cfg feature] define parameteres for specific 'routes'='locations'
 t_location*	Response::identifyLocation()
 {
 	t_location*		bestMatch;
@@ -200,6 +201,7 @@ int	Response::checkResolvedDirPath(std::string& dirPath)
 // 		\ if uploadPath undefined this location has a root or upload path
 // The path is built from parameter <dirPath> (the directory part of request's <_filePath>)
 // 		and stored into that same parameter
+// [cfg feature] define upload path for a certain location
 int	Response::buildFullPathUpload(std::string& dirPath)
 {
 	if (!(this->_location) || this->_location->uploadPath.empty())
@@ -270,6 +272,7 @@ int	Response::pathToUpload(std::string& fullPath, bool isDir)
 // 			the resource can't be found, so the function returns 1 resulting in a '404' error
 // The path is built from attribute <_filePath> of the request,
 // 		and stored into parameter <fullPath> (which is a reference)
+// [cfg feature] define 'root'/'alias' path for a certain location of vserver
 int	Response::buildFullPathFile(std::string& fullPath)
 {
 	if (this->_location && !(this->_location->rootPath.empty()))
@@ -386,7 +389,9 @@ int	Response::makeSuccessResponse(std::string status)
 
 	std::cout << "[Res::Gen] Generating success response with status " << status << "\n";
 	ss << "HTTP/1.1 " << status << "\r\n"
-		<< "Content-Length: 0" << "\r\n\r\n";
+		<< "Content-Length: " << (status.size() + 13) << "\r\n"
+		<< "Content-Type: text/html\r\n\r\n"
+		<< "<html>" << status << "</html>";
 	responseStr = ss.str();
 	this->makeResponseFromString(responseStr);
 	return (0);
@@ -400,7 +405,7 @@ int	Response::makeErrorResponseDefault(std::string status)
 
 	std::cout << "[Res::Gen] Generating default error page with error " << status << "\n";
 	ss << "HTTP/1.1 " << status << "\r\n"
-		<< "Content-Length: " << (status.size() + 12) << "\r\n"
+		<< "Content-Length: " << (status.size() + 13) << "\r\n"
 		<< "Content-Type: text/html\r\n\r\n"
 		<< "<html>" << status << "</html>";
 	responseStr = ss.str();
@@ -415,6 +420,7 @@ int	Response::makeErrorResponseDefault(std::string status)
 // 		\ virtual server must have an error page for <code> in its map <errorPages>
 // 		\ the error page file must exist and be regular
 // If a check fails, instead generates an default simple error page
+// [cfg feature] configure error page to serve for a specific error code
 int	Response::makeErrorResponse(std::string status)
 {
 	std::vector<std::string>	tokens;
@@ -433,7 +439,7 @@ int	Response::makeErrorResponse(std::string status)
 			pagePath = this->_vserv->rootPath + "/" + this->_vserv->errorPages[code];
 			if (stat(pagePath.c_str(), &fileStat) == 0 && S_ISREG(fileStat.st_mode))
 			{
-				this->_request->redirectPath("/" + this->_vserv->errorPages[code]);
+				this->_request->redirectPath("/" + this->_vserv->errorPages[code], "GET");
 				return (2);
 			}
 		}
@@ -451,6 +457,7 @@ int	Response::makeErrorResponse(std::string status)
 // 		\ request extension must belong to the CGI extensions list of the location
 // 			(extensions will mostly be '.php' or '.py',
 // 			 but any extension can be defined as CGI extension in the config file)
+// [cfg feature] define file extensions to be handled as CGI
 bool	Response::isCGIRequest()
 {
 	unsigned int	ind;
@@ -481,31 +488,41 @@ void	Response::logResponseBuffer()
 }
 
 // Calls the correct handling functions to generate the HTTP response
-// according to the request's method and use of CGI
-// #f : check POST request with no body and not a CGI 
-// 		check POST request targeting existing static file
-// #f : check that request is allowed at the given location (else, 405 error code)
-// #f : check existence of content length and content type for requests with a body
-// #f : check request ending with '/'
+// for a request not using CGI
+int	Response::handleNotCGI(void)
+{
+	std::cout << "\tRequest without CGI, method : " << this->_request->_method << "\n";
+	if (this->_request->_method == "GET")
+		return (this->handleGet());
+	else if (this->_request->_method == "POST")
+		return (this->handlePost());
+	else if (this->_request->_method == "DELETE")
+		return (this->handleDelete());
+	else
+		return (this->makeErrorResponse("501 Not Implemented"));
+}
+
+// Performs checks required by cfg file on request :
+// 		\ if body exists, it is not too large for the virtual server
+// 		\ method is allowed by targeted location (if there is no location, method must be GET)
+// Then calls the correct handling function according to need of CGI
+// [cfg feature : define methods allowed for a location, define max request body for a vserver]
 int	Response::produceResponse(void)
 {
 	std::cout << "[Res::Response] Generating response, virtual server = "
 		<< this->_vserv << ", location = " << this->_location << "\n";
+	if (this->_request->_hasBody && this->_request->_bodySize > this->_vserv->maxRequestBodySize)
+		return (this->makeErrorResponse("413 Content Too Large"));
+	if (!(this->_location) && this->_request->_method != "GET")
+		return (this->makeErrorResponse("405 Method Not Allowed"));
+	if (this->_location && this->_location->acceptedMethods.count(this->_request->_method) == 0)
+		return (this->makeErrorResponse("405 Method Not Allowed"));
+
 	if (this->isCGIRequest())
 	{
 		std::cout << "\tRequest for CGI, extension " << this->_request->_extension << "\n";
 		return (this->handleCGI());
 	}
 	else
-	{
-		std::cout << "\tRequest without CGI, method : " << this->_request->_method << "\n";
-		if (this->_request->_method == "GET")
-			return (this->handleGet());
-		else if (this->_request->_method == "POST")
-			return (this->handlePost());
-		else if (this->_request->_method == "DELETE")
-			return (this->handleDelete());
-		else
-			return (this->makeErrorResponse("501 Not Implemented"));
-	}
+		return (this->handleNotCGI());
 }

@@ -192,8 +192,10 @@ int	Response::handlePostRaw()
 // that must be stored on the server side at the location given by the path
 int	Response::handlePost()
 {
+	if (!(this->_request->_hasBody))
+		return (this->makeErrorResponse("400 Bad Request (POST/PUT with no body)"));
 	if (this->_request->_headers.count("Content-Type") == 0)
-		return (this->makeErrorResponse("400 Bad Request (no content type)"));
+		return (this->makeErrorResponse("400 Bad Request (POST/PUT with no content type)"));
 	if (this->_request->_headers["Content-Type"].compare(0, 19, "multipart/form-data") == 0)
 		return (this->handlePostMultipart());
 	else

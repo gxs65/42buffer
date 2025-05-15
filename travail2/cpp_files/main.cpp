@@ -6,7 +6,7 @@
 /*   By: abedin <abedin@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/28 15:09:46 by ilevy             #+#    #+#             */
-/*   Updated: 2025/05/14 19:49:43 by abedin           ###   ########.fr       */
+/*   Updated: 2025/05/15 20:27:16 by abedin           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -159,11 +159,18 @@ int	main(int ac, char **av)
 - a adapter dans le fichier de conf pour tester en local :
 	\ modifier l'IP sur laquelle ecoute le second serveur (comqnde `ip a` pour IP privee de l'appareil)
 	\ modifier les path definis dans les directives 'alias'/'root'
+
 - lignes de tests pour les differentes requetes, avec `nc` :
 	\ GET (non-CGI) : ```printf "GET /images/truc.html HTTP/1.1\r\nHost:localhost:8080\r\n\r\n" | nc 127.0.0.1 8080```
 	\ POST (non-CGI) : ```printf "POST /images/myfile.txt HTTP/1.1\r\nHost:localhost:8080\r\nContent-Length:3\r\nContent-Type:text/plain\r\n\r\nabc" | nc 127.0.0.1 8080```
 	\ DELETE : ```printf "DELETE /images/myfile.txt HTTP/1.1\r\nHost:localhost:8080\r\n\r\n" | nc 127.0.0.1 8080```
 	\ POST (CGI) : ```printf "POST /app/handleform.py HTTP/1.1\r\nHost:localhost:8080\r\nContent-Length:17\r\nContent-Type: application/x-www-form-urlencoded\r\n\r\nname=aa&surname=b" | nc 127.0.0.1 8080```
+- lignes de test pour un body chunked, avec `nc` :
+	\ POST (non-CGI) : ```printf "POST /images/myfile.txt HTTP/1.1\r\nHost:localhost:8080\r\nContent-Type:text/plain\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nabcde\r\n2\r\nf\n\r\n4\r\npol\n\r\n0\r\n\r\n" | nc 127.0.0.1 8080```
+	\ POST (CGI) : ```printf "POST /app/handleform.py HTTP/1.1\r\nHost:localhost:8080\r\nContent-Type:application/x-www-form-urlencoded\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nna\r\nB\r\nme=antoine&\r\nD\r\nsurname=bedin\r\n0\r\n\r\n" | nc 127.0.0.1 8080```
+- lignes de test d'upload, avec `curl` (sur un fichier "lorem3.txt"):
+	\ POST (non-CGI) chunked : ```curl -v http://localhost:8080/images/new.txt -H "Transfer-Encoding: chunked" --data-binary @lorem3.txt```
+	\ POST (non-CGI) chunked et multipart : ```curl -v http://localhost:8080/images/ -F "file=@lorem3.txt" -H "Transfer-Encoding: chunked"```
 
 - gestion de Transfer-Encoding: Chunked
 	\ autoriser l'absence de Content-Length quand le body est chunked
@@ -191,6 +198,17 @@ int	main(int ac, char **av)
 		/!\ implémentation ressemblera un peu à la démarche de gnl de check s'il y a un '\n' dans le remainder
 			avant de read à nouveau BUFFER_SIZE caractères (sauf que notre condition de fin de requête est plus complexe que '\n')
 
+- possibilites de redirection et besoin de modifier (a) status code (b) base href pour ressource HTML
+	\ CGI termine en redirection locale 
+		(a) reponse finale ne doit pas etre statut 3xx, mais exactement le statut
+			que l'on repondrait a une requete pour le path donne par CGI
+		(b) presence de base href est de la responsabilite de la ressource ciblee
+	\ fichier d'index trouve quand la requete cible une ressource qui est un directory
+		(a) statut de reponse sera 200 OK
+		(b) pas besoin de base href, puisque ce fichier d'index est cense etre a la base du directory indexe
+	\ fichier de config requiert 301 sur une certaine location pour une 'client redirection'
+		(a) il faut que le statut soit 3xx
+		(b) pas besoin de base href puisque le client va refaire une requete avec le bon path
 
 //////////
 // TODO //
@@ -217,7 +235,7 @@ int	main(int ac, char **av)
 + handling of CGIs on POST/GET
 + file uploads through Content-Type "multipart/form-data"
 + serve automatically generated index files when GET for a directory
-- implement chunked requests
++ implement chunked requests
 
 === CORRECTIONS MINEURES
 + remplacer les pair<int,short> par un type portaddr, avec un typedef
@@ -233,10 +251,10 @@ int	main(int ac, char **av)
 	 et donc un check du retour de response dans Server pour detruire l'instance une fois qu'elle a close la connexion)
 + commentaire sur le fait qu'une malformed request avec un body mais pas de "content-length" va desynchroniser la connexion
 - verifier tous les champs non implementes du fichier de config
-	+ error pages
-	\ max body size
-	\ accepted methods for a location
-	\ redirections 301
+	+ pages d'erreur
+	+ max taille de body
+	+ methodes acceptees pour une location
+	\ redirections 301 (rajouter champ statut force dans <Request>)
 - implementer methode PUT (qui est une copie de POST non-CGI)
 - actuellement la reponse est ecrite en une fois dans le socket si possible,
 	verifier si on devrait definir une taille de buffer de sortie
@@ -251,6 +269,11 @@ int	main(int ac, char **av)
 - check protocol version
 - agrementer le HTML de la default error page
 - implementer tous les '#f'
+- permettre a la methode DELETE de supprimer des directories
+- boucle bizarre sur les error pages : si page pour 404 contient des ressources,
+	que le browser nous les demande et qu'on ne les trouve pas non plus, on re-envoie la page 404
+- modifier la gestion des error pages pour ne pas passer par une redirection, mais directement makeFileResponse
+	(possible sans boucle, puisque makeFileResponse ne peut que erreur 500, et error pages interdites pour 500)
 
 === EN BESOIN DE TESTS POUSSES
 - tests sur l'identification du vserver et de la location :
@@ -262,8 +285,13 @@ int	main(int ac, char **av)
 - tests avec le testeur fourni par 42 (requiert gestion de la methode PUT)
 
 === A ENVISAGER
++ amelioration de l'implementation de la reception de chunked requests :
+	actuellement <appendToChunkedBody> attend le "\r\n" pour calculer la taille de chunk
+	dans le buffer qu'on lui donne en para, donc problemes potentiels avec petites tailles de buffer
+		-> corriger avec un std::string gardant en memoire les morceaux de buffer jusque trouver "\r\n"
 - tests avec outils externes
-	\ faire quelques tests avec nginx pour voir le contenu des headers
+	\ faire quelques tests avec nginx pour voir le contenu des headers,
+		surtout des tests sur redirection 301 pour voir si c'est user ou local redirection
 	\ eventuellement un script de test utilisant curl/nc ?
 	\ essayer d'utiliser wireshark
 - protection contre l'epuisement de la memoire dynamique
@@ -271,15 +299,30 @@ int	main(int ac, char **av)
 	\ un compteur de memoire consommee pour refuser les clients quand on atteint une limite ?
 - implementation minimale de la gestion du pipelining :
 	apres avoir recu des octets 'en trop', les stocker pour y revenir au prochain POLLIN
+- lecture dans un socket quand on recoit un POLLIN : actuellement on se limite
+  a lire une taille de buffer, puis on attend le prochain POLLIN pour lire a nouveau
+	mais pourrait-on lire jusqu'a ce qu'il n'y ait plus rien dans le socket
+		(et simplement checker que le premier read n'est pas nul pour la condition de fin de connexion)
 
 === POSSIBLES AMELIORATIONS POST-CC
 - gestion plus precise des erreurs 400 : si <Request.parse> renvoie 1 pour une erreur,
 	il ne faut close la connection pour cause de desynchronisation
 	QUE SI "Content-Length" est inconnu, sinon on peut toujours ignorer cette requete
 	et lire la suivante sans perdre le fil
+- de maniere generale, definir plusieurs valeurs de retour pour <Request.parse> :
+	malformed request non desynchronisante, malformed request desynchronisante, not implemented...
+- amelioration/harmonisation de la recherche de "\r\n\r\n" dans les octets lus dans le socket :
+	maintenir un <lastBuffer> avec le dernier buffer lu (contenant potentiellement le debut du sep)
+	est redondant puisque on a deja ces octets stockes dans dans la std::string des headers
+		-> creer le "combined" on recherche sep a partir des 3 derniers octets de cette string + le buffer
+- amelioration de la reception des chunked requests : accepter les 'trailers'
+	(les headers ajoutes par le client apres le dernier chunk)
 - implementation des chunked responses (le Client, au lieu de recuperer le buffer de sa Response,
 	la laisserait ecrire ou non un chunk dans le socket a chaque event POLLOUT)
 - gestion des chemins relatifs dans le fichier de configuration :
 	quand il y a une directive 'root' dans ce bloc ou un bloc inferieur,
 	on peut accepter les chemins ne commencant pas par '/' en les prefixant du chemin 'root'
+- replacer la determination de vserver et location dans la classe <Request> :
+	c'est plus coherent et necessaire vu le check de maxRequestBodySize du vserver,
+	meme si ca s'eloigne un peu du strict role de parsing de <Request>
 */

@@ -36,20 +36,21 @@ struct s_location
 // 				to use them with function <bind>, convert to network byte order thanks to <htonl>/<htons>
 // 		\ serverNames : list of names of the server, used to diambiguate request destination
 // 		  if a request is received on a portaddr on which multiple virtual servers are listening
-// 		\ errorPages : map associating an error page to an error code
-// 		\ maxRequestBodySize : max size of a client request, in ?? (#f : determine unit)
+// 		\ errorPages : map associating an error page to an error code (all codes accepted except 5xx)
+// 		\ maxRequestBodySize : max size of a client request, in BYTES
 // 		\ locations : list of locations parameters structures
 // 		\ rootPath : default path to prepend to URL to get to the right directory in server's arborescence
 // 			(if a location block has its own rootPath, it takes precedence)
+// /!\ A virtual server has no list of accepted methods : for safety, the only allowed method is GET
 struct s_vserver
 {
-	std::set<t_portaddr>						portaddrs;
-	bool										listenSet;
-	std::set<std::string>						serverNames;
-	std::map<int, std::string>					errorPages;
-	long										maxRequestBodySize;
-	std::vector<t_location>						locations;
-	std::string									rootPath;
+	std::set<t_portaddr>				portaddrs;
+	bool								listenSet;
+	std::set<std::string>				serverNames;
+	std::map<int, std::string>			errorPages;
+	unsigned long 						maxRequestBodySize;
+	std::vector<t_location>				locations;
+	std::string							rootPath;
 };
 
 // Forward declaration

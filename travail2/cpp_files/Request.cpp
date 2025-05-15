@@ -6,7 +6,7 @@
 /*   By: abedin <abedin@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/30 16:08:40 by ilevy             #+#    #+#             */
-/*   Updated: 2025/05/14 16:12:52 by abedin           ###   ########.fr       */
+/*   Updated: 2025/05/15 19:34:49 by abedin           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -25,6 +25,7 @@ Request::Request(t_mainSocket& mainSocket) : _mainSocket(mainSocket)
 {
 	std::cout << "Constructor for Request\n";
 	this->_body = NULL;
+	this->_nReceivedBodyBytes = 0;
 	this->_hasBody = 0;
 	this->_bodySize = 0;
 }
@@ -80,29 +81,233 @@ ssize_t	Request::containsHeadersEnd(char *lastBuffer, char* buffer, size_t buffe
 }
 
 // Allocates the `char*` buffer to store the body bytes of this request
+// 		(only for non-chunked body, since for chunked body total size is unknown)
 // /!\ Allocates 1 more byte than necessary for <_bodySize>
 // 	   to be safe in case of use on <_body> of <strcpy> or another function that would want to add '\0'
 void	Request::allocateBody()
 {
-	std::cout << "[Req::allocate] allocated body of " << this->_bodySize << " bytes for request\n";
-	this->_body = new char[this->_bodySize + 1];
-	bzero(this->_body, this->_bodySize + 1);
-	this->_nReceivedBodyBytes = 0;
+	if (this->_chunkedBody == 0)
+	{
+		std::cout << "[Req::allocate] allocates body of " << this->_bodySize << " bytes for request\n";
+		this->_body = new char[this->_bodySize + 1];
+		bzero(this->_body, this->_bodySize + 1);
+		this->_nReceivedBodyBytes = 0;
+	}
 }
 
 // Appends <bufferSize> bytes from <buffer> to the <_body>,
-// using <_nReceivedBodyBytes> to keep track of the position in <_body>
-void	Request::appendToBody(char *buffer, size_t bufferSize)
+// using <_nReceivedBodyBytes> to keep track of the position in <_body>,
+// and returns 0 if body still needs bytes to be completed, or 1/2 if those bytes completed it
+// In case of chunked body, handling of <buffer> is passed to <appendToChunkedBody>
+// 		which may also return 3 in case of an error in chunked body
+int	Request::appendToBody(char *buffer, size_t bufferSize)
 {
-	size_t	ind;
-
-	ind = 0;
-	while (ind < bufferSize)
+	if (this->_chunkedBody)
+		return (this->appendToChunkedBody(buffer, bufferSize));
+	if (this->_nReceivedBodyBytes + bufferSize == this->_bodySize)
 	{
-		this->_body[this->_nReceivedBodyBytes + ind] = buffer[ind];
-		ind++;
+		memcpy(this->_body + this->_nReceivedBodyBytes, buffer, bufferSize);
+		this->_nReceivedBodyBytes += bufferSize;
+		std::cout << "\t\t[Req::recBody] Received just enough bytes to complete body ("
+			<< this->_nReceivedBodyBytes << " / " << this->_bodySize << ")\n";
+		return (1);
 	}
-	this->_nReceivedBodyBytes += bufferSize;
+	else if (this->_nReceivedBodyBytes + bufferSize > this->_bodySize)
+	{
+		memcpy(this->_body + this->_nReceivedBodyBytes, buffer, this->_bodySize - this->_nReceivedBodyBytes);
+		std::cout << "\t\t[Req::recBody] (Warning) Received more than enough bytes to complete body ("
+			<< this->_nReceivedBodyBytes + bufferSize << " / " << this->_bodySize << ")\n";
+		this->_nReceivedBodyBytes = this->_bodySize;
+		return (2);
+	}
+	else
+	{
+		memcpy(this->_body + this->_nReceivedBodyBytes, buffer, bufferSize);
+		this->_nReceivedBodyBytes += bufferSize;
+		std::cout << "\t\t[CH::receiveHTTP] Received bytes for body, still not complete ("
+			<< this->_nReceivedBodyBytes << " / " << this->_bodySize << ")\n";
+		return (0);
+	}
+}
+
+////////////////////////////
+// CHUNKED BODY RECEPTION //
+////////////////////////////
+
+// Sets the values/flags for processing chunked body to their correct initial values
+void	Request::initChunkedBody()
+{
+	this->_chunksTotalSize = 0;
+	this->_bodySize = 0;
+	this->_body = NULL;
+	this->_chunkSepOffset = 0;
+	this->_chunkSize = std::string::npos;
+	this->_prevChunkHead = "";
+	this->_nReceivedChunkBytes = 0;
+	this->_lastChunkDone = 0;
+}
+
+// Updates the body buffer when a new chunk makes the old body size insufficient
+// Allocates a new body of twice the required size (for margin)
+// then copies the content of the old body to the new body (as in a <realloc>)
+void	Request::adaptBodySizeToChunks()
+{
+	char	*newBody;
+
+	if (this->_bodySize >= this->_chunksTotalSize)
+		return ;
+	std::cout << "\textending body to size " << this->_chunksTotalSize * 2 << "\n";
+	newBody = new char[this->_chunksTotalSize * 2];
+	bzero(newBody, this->_chunksTotalSize * 2);
+	if (this->_body)
+	{
+		memcpy(newBody, this->_body, this->_nReceivedBodyBytes);
+		delete[] this->_body;
+	}
+	this->_body = newBody;
+	this->_bodySize = this->_chunksTotalSize * 2;
+}
+
+// Combines the previously read bytes in <this._prevChunkHead> and the bytes in <buffer>
+// into a <haystack>, then searches <haystack> for separator "\r\n" and returns its index
+ssize_t	Request::searchForChunkHead(char *buffer, size_t bufferSize)
+{
+	ssize_t			indInHaystack;
+	const char*		needle = "\r\n";
+	char*			haystack;
+	size_t			haystackSize;
+
+	haystackSize = this->_prevChunkHead.size() + bufferSize;
+	haystack = new char[haystackSize + 1];
+	bzero(haystack, haystackSize + 1);
+	memcpy(haystack, this->_prevChunkHead.c_str(), this->_prevChunkHead.size());
+	memcpy(haystack + this->_prevChunkHead.size(), buffer, bufferSize);
+	indInHaystack = memFind(haystack, haystackSize, needle, 2);
+	delete[] haystack;
+	return (indInHaystack);
+}
+
+// Function called when next chunk size is unknown (`this_chunkSize == std::string::npos`)
+// 		<=> the last received bytes of chunked body were bytes on a chunk head,
+// 			and the <buffer> could contain separator "\r\n" indicating chunk head end
+// Member variable <_prevChunkHead> contains all bytes of this chunk head received until now,
+// these bytes are concatenated with the <buffer> bytes in <haystack>,
+// then <haystack> is searched for chunk head end "\r\n"
+// 		\ if not found <buffer> bytes are simply appended to <_prevChunkHead>,
+// 				then function returns to wait for next bytes
+// 		\ if found, next chunk size is extracted from bytes, <_body> is extended if needed,
+// 			and potential additional bytes after "\r\n" are processed
+// Error cases (function returns 3) :
+// 		\ `(indInHaystack != -1 && ind + 1 < 0)` : separator found,
+// 				but character '\n' is in <_prevChunkHead> instead of <buffer>
+// 		\ `(indInHaystack == -1 && strlen(buffer) != bufferSize)` :
+// 				there are '\0' characters inside a chunk head
+int	Request::processChunkHead(char *buffer, size_t bufferSize)
+{
+	ssize_t			indInHaystack;
+	ssize_t			ind;
+
+	indInHaystack = this->searchForChunkHead(buffer, bufferSize);
+	ind = indInHaystack - this->_prevChunkHead.size();
+	std::cout << "\tresult of search for chunk head end : in haystack "
+		<< indInHaystack << ", in buffer " << ind << "\n";
+	if ((indInHaystack != -1 && ind + 1 < 0)
+		|| (indInHaystack == -1 && strlen(buffer) != bufferSize))
+		return (3);
+	if (indInHaystack == -1)
+	{
+		std::cout << "\tchunk head end not found in buffer\n";
+		this->_prevChunkHead += std::string(buffer);
+		return (0);
+	}
+	if (ind > 0) // <=> if the '\r' character is in <buffer> and at least at pos 1 in <buffer
+		this->_prevChunkHead += std::string(buffer, buffer + ind);
+	this->_chunkSize = strtoul(this->_prevChunkHead.c_str(), NULL, 16);
+	std::cout << "\tfound chunk head end at index " << ind << " -> chunkSize " << this->_chunkSize << "\n";
+	this->_prevChunkHead = "";
+	this->_chunksTotalSize += this->_chunkSize;
+	this->adaptBodySizeToChunks();
+	if (this->_chunkSize == 0)
+		this->_bodySize = this->_chunksTotalSize;
+	if (ind + 2 < static_cast<ssize_t>(bufferSize))
+		return (this->appendToChunkedBody(buffer + ind + 2, bufferSize - ind - 2));
+	else
+		return (0);
+}
+
+// Processes a <buffer> containing bytes of a chunked body ("Transfer-Encoding: chunked")
+// HTTP chunked bodies are made of any number of (chunk head + sep + chunk content + sep), where
+// 		\ chunk head gives chunk content size in base 16
+// 		\ sep is "\r\n"
+// 		\ end of chunked body is indicated by last chunk of size 0
+// General functioning :
+// 		\ a lot of potential recursion : once some bytes are extracted 
+// 		  for chunk head / chunk content / separator ("\r\n"), recurr on remaining bytes
+// 			until there is no more remaining bytes (ret 0) / error occurs (ret 3) / body ends (ret 1,2)
+// 		\ member variable <_chunkSize> means
+// 			~ if defined : currently processing bytes from chunk content, chunk has this size
+// 			~ if undefined (std::string::npos) : currently processing bytes from chunk head,
+// 				once chunk head end found the chunk size will be extracted from chunk head
+// 		\ member variable <_chunkSepOffset> means
+// 			~ if 0 : bytes can be processed as usual according to <_chunkSize>
+// 			~ if 1,2 : that much bytes constituting separator "\r\n" at a chunk's end are expected
+// 				-> check that bytes are indeed "\r" or "\n", extract them, and recurr
+// 		\ for end condition, member variable <_lastChunkDone> set to 1 when chunk of size 0 found,
+// 			there remains only two bytes final "\r\n" to read (<_chunkSepOffset> = 2)
+// 			then function can return 1 if no more bytes as expected, or 2 if bytes still present in buffer
+// Function flow :
+// 		\ check chunked body end condition, check recursion end condition
+// 		\ extract separator bytes if necessary (`_chunkSepOffset > 0`)
+// 		\ extract chunk head bytes if necessary (`_chunkSize == std::string::npos`)
+// 		\ add buffer bytes to body, if more bytes than necessary to complete chunk,
+// 			set <_chunkSepOffset> to expect "\r\n" and recurr on supplementary bytes
+int	Request::appendToChunkedBody(char *buffer, size_t bufferSize)
+{
+	ssize_t		suppBytes;
+
+	std::cout << "[Req::recChunk] on buffer of size " << bufferSize
+		<< ", chunkSize " << this->_chunkSize << ",\n\tnReceived " << this->_nReceivedBodyBytes
+		<< ", sepOffset " << this->_chunkSepOffset << ", last " << this->_lastChunkDone
+		<< "\n\033[33m<\n" << buffer << "\n>\033[0m\n";
+	if (bufferSize == 0 && this->_lastChunkDone)
+		return (1);
+	if (bufferSize == 0)
+		return (0);
+	if (this->_chunkSepOffset > 0)
+	{
+		if ((this->_chunkSepOffset == 2 && buffer[0] != '\r')
+			|| (this->_chunkSepOffset == 1 && buffer[0] != '\n'))
+			return (3);
+		this->_chunkSepOffset--;
+		return (this->appendToChunkedBody(buffer + 1, bufferSize - 1));
+	}
+	if (this->_chunkSize == std::string::npos)
+		return (this->processChunkHead(buffer, bufferSize));
+	if (this->_lastChunkDone)
+	{
+		std::cout << "[Req::recChunk] (Warning) Received bytes after last chunk\n";
+		return (2);
+	}
+	suppBytes = this->_nReceivedBodyBytes + bufferSize - this->_chunksTotalSize;
+	if (suppBytes < 0)
+	{
+		std::cout << "\tbytes appended to current chunk\n";
+		memcpy(this->_body + this->_nReceivedBodyBytes, buffer, bufferSize);
+		this->_nReceivedBodyBytes += bufferSize;
+		return (0);
+	}
+	else
+	{
+		std::cout << "\tbytes completing current chunk\n";
+		if (this->_chunkSize == 0)
+			this->_lastChunkDone = 1;
+		else
+			memcpy(this->_body + this->_nReceivedBodyBytes, buffer, bufferSize - suppBytes);
+		this->_nReceivedBodyBytes = this->_chunksTotalSize;
+		this->_chunkSize = std::string::npos;
+		this->_chunkSepOffset = 2;
+		return (this->appendToChunkedBody(buffer + bufferSize - suppBytes, suppBytes));
+	}
 }
 
 /////////////////////
@@ -157,35 +362,46 @@ bool	Request::parseFirstLine(const std::string& rawHeaders)
 	return (0);
 }
 
-// Checks that mandatory header 'host' is present,
-// and that other headers are coherent with request method and body presence
+// Checks request headers coherence with request method and body presence
+// Some specific checks :
+// 		\ presence of host header
+// 		\ if and only if presence of body, then presence of Content-Type
+// 		\ presence of Transfer-Encoding incompatible with Content-Length ; must have value "chunked"
+// Then sets flags <_hasBody> (+ size <_bodySize) and <_chunkedBody>
+// according to headers Content-Length/Transfer-Encoding
 bool	Request::checkHeaders()
 {
+	bool	hasBody = (this->_headers.count("Content-Length") || this->_headers.count("Transfer-Encoding"));
+
 	if (this->_headers.count("Host") == 0)
+		return (logError("[Req::parse] Error : Request lacks 'host' header", 0));
+	if (hasBody && this->_method == "GET")
+		return (logError("[Req::parse] Error : Request GET with body", 0));
+	if (this->_headers.count("Transfer-Encoding") && this->_headers["Transfer-Encoding"] != "chunked")
+		return (logError("[Req::parse] Error: Transfer-Encoding has value other than 'chunked'", 0));
+	if (hasBody && this->_headers.count("Content-Type") == 0)
+		return (logError("[Req::parse] Error : Request with body lacks Content-Type header", 0));
+	if (!hasBody && this->_headers.count("Content-Type") > 0)
+		return (logError("[Req::parse] Error : Request without body has Content-Type header", 0));
+	if (this->_headers.count("Content-Length") && this->_headers.count("Transfer-Encoding"))
+		return (logError("[Req::parse] Error: Chunked Request contains unchunked body", 0));
+	
+	if (this->_headers.count("Content-Length"))
 	{
-		std::cout << "[Req::parse] Error : Request lacks 'host' header\n";
-		return (1);
+		this->_hasBody = 1;
+		this->_bodySize = static_cast<unsigned long>(strtol(this->_headers["Content-Length"].c_str(), NULL, 10));
 	}
-	if (this->_hasBody && this->_method == "GET")
+	else if (this->_headers.count("Transfer-Encoding") && this->_headers["Transfer-Encoding"] == "chunked")
 	{
-		std::cout << "[Req::parse] Error : Request GET with body\n";
-		return (1);
-	}
-	if (this->_hasBody && this->_headers.count("Content-Type") == 0)
-	{
-		std::cout << "[Req::parse] Error : Request with body lacks Content-Type header\n";
-		return (1);
-	}
-	if (!(this->_hasBody) && this->_headers.count("Content-Type") > 0)
-	{
-		std::cout << "[Req::parse] Error : Request without body has Content-Type header\n";
-		return (1);
+		this->_hasBody = 1;
+		this->_chunkedBody = 1;
+		this->initChunkedBody();
 	}
 	return (0);
 }
 
 // For each header line, parses it and inserts it into map <_headers>,
-// then sets <_hasBody> and <_bodySize> if header 'Content-Length' is present
+// then calls <checkHeaders> to check headers coherence and detect body presence
 bool	Request::parseHeaders(const std::string& rawHeaders)
 {
 	size_t		line_start;
@@ -211,11 +427,6 @@ bool	Request::parseHeaders(const std::string& rawHeaders)
 			this->_headers[key] = value;
 		}
 		line_start = line_end + 2;
-	}
-	if (this->_headers.count("Content-Length") > 0)
-	{
-		this->_hasBody = 1;
-		this->_bodySize = static_cast<unsigned long>(strtol(this->_headers["Content-Length"].c_str(), NULL, 10));
 	}
 	if (this->checkHeaders())
 		return (1);
@@ -309,15 +520,30 @@ void	Request::extractFromHost()
 // REDIRECTIONS //
 //////////////////
 
-// Public method to be called when a local redirection occurs,
-// which modifies only 1 element inside the request : the path to requested resource
-// Updates the member string <_path> and re-parses it with <extractFromURL>
-int		Request::redirectPath(std::string newPath)
+// Public method to be called when a local redirection occurs, to modify :
+// 		\ the request's path to resource = member string <_path>
+// 			-> <_path> must be re-parsed with <extractFromURL>
+// 		\ (optionnally) the request's method, eg. for redirection to error/index pages
+// 			-> if the method become "GET", body and its headers must be removed
+int		Request::redirectPath(std::string newPath, std::string newMethod)
 {
 	if (newPath.empty() || newPath[0] != '/')
 		return (1);
 	this->_path = newPath;
 	this->extractFromURL();
+
+	if (newMethod.empty())
+		return (0);
+	if (this->_method != "GET" && newMethod == "GET")
+	{
+		this->_hasBody = 0;
+		if (this->_body)
+		{
+			delete[] this->_body;
+			this->_body = NULL;
+		}
+	}
+	this->_method = newMethod;
 	return (0);
 }
 

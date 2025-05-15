@@ -91,6 +91,7 @@ void	Server::addPortaddrToWebserv(const t_portaddr& portaddr, unsigned int vserv
 // 		   for which it is listening
 // 		-> identification of the specific virtual server to which a request is directed
 // 		   is done after request parsing, using the virtual servers' names)
+// [cfg feature] configure portaddr on which vserv is listening
 void	Server::initMainSockets(void)
 {
 	unsigned int						vservInd;

@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Request.cpp                                        :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: abedin <abedin@student.42.fr>              +#+  +:+       +#+        */
+/*   By: administyrateur <administyrateur@studen    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/30 16:08:40 by ilevy             #+#    #+#             */
-/*   Updated: 2025/05/16 19:54:15 by abedin           ###   ########.fr       */
+/*   Updated: 2025/05/17 19:30:09 by administyra      ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -27,6 +27,7 @@ Request::Request(t_mainSocket& mainSocket) : _mainSocket(mainSocket)
 	this->_body = NULL;
 	this->_nReceivedBodyBytes = 0;
 	this->_hasBody = 0;
+	this->_chunkedBody = 0;
 	this->_bodySize = 0;
 }
 

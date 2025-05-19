@@ -104,7 +104,7 @@ int		Response::generateCGIResponseClientRedirectDoc(std::map<std::string, std::s
 {
 	std::cout << "\t-> generating response for client redirect, with document\n";
 	if (this->checkCGIOutputBody(cgiHeaders))
-		return (this->makeErrorResponse("500 Internal Server Error (CGI output unreadable)"));
+		return (this->makeErrorResponse("500 Internal Server Error (CGI output unreadable, body)"));
 	if (statusCode.empty())
 	{
 		statusCode = "302";
@@ -123,7 +123,7 @@ int		Response::generateCGIResponseNoredir(std::map<std::string, std::string>& cg
 {
 	std::cout << "\t-> generating response without redirect, body of size " << this->_cgiOutputBody.size() << "\n";
 	if (this->checkCGIOutputBody(cgiHeaders))
-		return (this->makeErrorResponse("500 Internal Server Error (CGI output unreadable)"));
+		return (this->makeErrorResponse("500 Internal Server Error (CGI output unreadable, body)"));
 	if (statusCode.empty())
 	{
 		statusCode = "200";
@@ -141,20 +141,28 @@ int		Response::generateCGIResponseNoredir(std::map<std::string, std::string>& cg
 
 // Goes through the <std::vector> of <char> storing the CGI output
 // to find the double linebreak separating headers from body
-// Returns the index of the first '\n' in the double linebreak
-// (return value 0 also serves as error indicator,
-//  since there is an error if double linebreak absent, and also if present at position 0)
-unsigned long	Response::findCGIOutputHeader()
+// 		\ since CGI may use "\n" but also "\r\n" linebreaks,
+// 		  this function searches for both and returns -1 if not found,
+// 		  2 if found "\n" double linebreak, 4 if found "\r\n" double linebreak
+// 		\ stores in <ind> the index of the first character of the double linebreak,
+// 		  or std::string::npos if not found
+int	Response::findCGIOutputHeader(size_t& ind)
 {
-	unsigned long	ind = 0;
-
-	while (ind + 1 < this->_cgiOutput.size())
+	std::vector<char>&	output = this->_cgiOutput;
+	size_t				siz = output.size();
+	
+	ind = 0;
+	while (ind < siz)
 	{
-		if (this->_cgiOutput[ind] == '\n' && this->_cgiOutput[ind + 1] == '\n')
-			return (ind);
+		if (ind + 1 < siz && output[ind] == '\n' && output[ind + 1] == '\n')
+			return (2);
+		if (ind + 3 < siz && output[ind] == '\r' && output[ind + 1] == '\n'
+						  && output[ind + 2] == '\r' && output[ind + 3] == '\n')
+			return (4);
 		ind++;
 	}
-	return (0);
+	ind = std::string::npos;
+	return (-1);
 }
 
 // Parses the status line from the CGI output : searches for the separator,
@@ -204,6 +212,7 @@ int	Response::parseCGIHeaderLine(std::string& line, std::map<std::string, std::s
 	return (0);
 }
 
+// #f : correct this comment
 // Parses the headers part of CGI output, formatted like an HTTP request, except
 // 		\ line separators is usual '\n' instead of '\r\n'
 // 		\ there is no 'path' line but a 'Status' header
@@ -215,23 +224,27 @@ int	Response::parseCGIHeaderLine(std::string& line, std::map<std::string, std::s
 int	Response::parseCGIHeaders(std::map<std::string, std::string>& cgiHeaders,
 	std::string& statusCode, std::string& statusDesc)
 {
-	unsigned long		posEndHeaders;
+	size_t				posEndHeaders;
+	int					linebreakType;
 	std::string			headersString;
 	std::stringstream	parserStream;
 	std::string			line;
 
 	// Locate separation between headers and (optional) body
-	posEndHeaders = this->findCGIOutputHeader();
-	if (posEndHeaders == 0)
-		return (1);
-	headersString = std::string(this->_cgiOutput.begin(), this->_cgiOutput.begin() + posEndHeaders);
+	linebreakType = this->findCGIOutputHeader(posEndHeaders);
+	std::cout << "\tposition of linebreak " << posEndHeaders << " / " << this->_cgiOutput.size()
+		<< ", type of linebreak : " << linebreakType << "\n";
+	if (linebreakType == -1)
+		return (logError("[Res::parseCGIout] headers end not found", 0));
+	headersString = std::string(this->_cgiOutput.begin(), this->_cgiOutput.begin() + posEndHeaders + linebreakType);
+	headersString.erase(std::remove(headersString.begin(), headersString.end(), '\r'), headersString.end());
 	this->_cgiOutputBody.clear();
-	std::cout << "\tposition of linebreak " << posEndHeaders << " / " << this->_cgiOutput.size() << "\n";
-	if (posEndHeaders == this->_cgiOutput.size() - 1)
+	if (posEndHeaders + linebreakType == this->_cgiOutput.size())
 		std::cout << "\tCGI output has no body\n";
 	else
 	{
-		this->_cgiOutputBody = std::vector<char>(this->_cgiOutput.begin() + posEndHeaders + 2, this->_cgiOutput.end());
+		this->_cgiOutputBody = std::vector<char>(this->_cgiOutput.begin() + posEndHeaders + linebreakType,
+			this->_cgiOutput.end());
 		std::cout << "\tCGI output has body of size " << this->_cgiOutputBody.size() << "\n";
 	}
 
@@ -244,7 +257,7 @@ int	Response::parseCGIHeaders(std::map<std::string, std::string>& cgiHeaders,
 			if (!(statusCode.empty()) || this->parseCGIStatusLine(line, statusCode, statusDesc))
 				return (1);
 		}
-		else if (this->parseCGIHeaderLine(line, cgiHeaders))
+		else if ((!line.empty()) && this->parseCGIHeaderLine(line, cgiHeaders))
 			return (1);
 	}
 	return (0);
@@ -291,14 +304,14 @@ int	Response::processCGIOutput()
 
 	logCGIOutput(this->_cgiOutput);
 	if (this->parseCGIHeaders(cgiHeaders, statusCode, statusDesc))
-		return (this->makeErrorResponse("500 Internal Server Error (CGI output unreadable)"));
+		return (this->makeErrorResponse("500 Internal Server Error (CGI output unreadable, headers)"));
 	std::cout << "\textracted headers string from CGI output :\n";
 	logCGIHeaders(cgiHeaders, statusCode, statusDesc, this->_cgiOutputBody);
 
 	if (cgiHeaders.count("Location") == 1)
 	{
 		if (cgiHeaders["Location"].size() == 0)
-			return (this->makeErrorResponse("500 Internal Server Error (CGI output unreadable)"));
+			return (this->makeErrorResponse("500 Internal Server Error (CGI output unreadable, location)"));
 		else if (this->_cgiOutputBody.size() > 0)
 			return (this->generateCGIResponseClientRedirectDoc(cgiHeaders, statusCode, statusDesc));
 		else if (cgiHeaders["Location"][0] == '/')
@@ -326,13 +339,16 @@ void	Response::setupCGIEnv(std::string& fullPath, std::map<std::string, std::str
 	in_addr											clientAddress;
 
 	clientAddress.s_addr = htonl(this->_clientPortaddr.first);
-	env["PATH_INFO"] = this->_request->_pathInfo.c_str();
-	env["QUERY_STRING"] = this->_request->_queryString.c_str();
-	env["REQUEST_METHOD"] = this->_request->_method.c_str();
+	if (this->_request->_pathInfo.empty())
+		env["PATH_INFO"] = "/";
+	else
+		env["PATH_INFO"] = this->_request->_pathInfo;
+	env["QUERY_STRING"] = this->_request->_queryString;
+	env["REQUEST_METHOD"] = this->_request->_method;
 	if (this->_request->_method == "POST")
 	{
 		env["CONTENT_LENGTH"] = itostr(this->_request->_bodySize);
-		env["CONTENT_TYPE"] = headers["Content-Type"].c_str();
+		env["CONTENT_TYPE"] = headers["Content-Type"];
 		// std::cout << "CGI CHILD env for POST request :\n"
 		// 	<< "\tCONTENT_LENGTH to " << this->_request->_body.size() << "\n"
 		// 	<< "\tCONTENT_TYPE to " << headers["Content-Type"] << "\n"
@@ -340,9 +356,9 @@ void	Response::setupCGIEnv(std::string& fullPath, std::map<std::string, std::str
 	}
 	env["GATEWAY_INTERFACE"] = "CGI/1.1";
 	env["REMOTE_ADDR"] = std::string(inet_ntoa(clientAddress));
-	env["SCRIPT_NAME"] = fullPath.c_str();
-	env["SERVER_NAME"] = this->_request->_hostName.c_str(); // /!\ empty if request used IP instead of domain name
-	env["SERVER_PORT"] = itostr(this->_request->_mainSocket.portaddr.second).c_str();
+	env["SCRIPT_NAME"] = fullPath;
+	env["SERVER_NAME"] = this->_request->_hostName; // /!\ empty if request used IP instead of domain name
+	env["SERVER_PORT"] = itostr(this->_request->_mainSocket.portaddr.second);
 	env["SERVER_PROTOCOL"] = "HTTP/1.1";
 	env["SERVER_SOFTWARE"] = "Webserv";
 }
@@ -378,10 +394,12 @@ char**	Response::createEnvArray(std::string& fullPath, int* envArraySize)
 // 		\ redirect 'stdin' (request body received from <fdInput>)
 // 		  and 'stdout' (CGI output sent to <fdOutput>)
 // 		\ setup arrays holding arguments to the main :
-// 		  <argv> with path to script as <argv[0]>, <envArray> with env variables
+// 			~ <envArray> with env variables
+// 			~ <argv> with path to interpreter as <argv[0]>, path to script at <argv[1]>
 // /!\ Arrays allocation done in C++ style with <new>/<delete>, even if <execve> is a C function,
 // 	   this does not create problems because <execve> does not care how memory was allocated
-void	Response::childExecuteCGI(std::string& fullPath, int fdInput, int fdOutput)
+void	Response::childExecuteCGI(std::string& fullPath, std::string& interpreterPath,
+	int fdInput, int fdOutput)
 {
 	char**			argv;
 	char**			envArray;
@@ -394,9 +412,10 @@ void	Response::childExecuteCGI(std::string& fullPath, int fdInput, int fdOutput)
 		logError("CGI CHILD : Error: 'dup2' failure", 1);
 		exit(127);
 	}
-	argv = new char*[2 * sizeof(char *)];
-	argv[0] = duplicateCstr(fullPath.c_str());
-	argv[1] = NULL;
+	argv = new char*[3 * sizeof(char *)];
+	argv[0] = duplicateCstr(interpreterPath.c_str());
+	argv[1] = duplicateCstr(fullPath.c_str());
+	argv[2] = NULL;
 	envArray = this->createEnvArray(fullPath, &envArraySize);
 	if (!envArray)
 	{
@@ -514,7 +533,7 @@ int		Response::waitForChildCGI(pid_t pid, int *pipeRequest, int *pipeResponse)
 // 		\ first to send the request body to the CGI script
 // 		\ second to receive the output from the CGI script
 // then calls <fork> to create an executor child
-int		Response::forkCGI(std::string& fullPath)
+int		Response::forkCGI(std::string& fullPath, std::string& interpreterPath)
 {
 	int		pipeRequest[2];
 	int		pipeResponse[2];
@@ -534,7 +553,7 @@ int		Response::forkCGI(std::string& fullPath)
 	{
 		close(pipeRequest[1]);
 		close(pipeResponse[0]);
-		this->childExecuteCGI(fullPath, pipeRequest[0], pipeResponse[1]);
+		this->childExecuteCGI(fullPath, interpreterPath, pipeRequest[0], pipeResponse[1]);
 		return (0);
 	}
 	else
@@ -544,12 +563,13 @@ int		Response::forkCGI(std::string& fullPath)
 // CGI (Common Gateway Interface) is the convention by which a client can ask
 // for the execution of a script/program on the server side
 // This function is called only if
-// 		a) the config file allowed Webserv to perform CGI (ie. execute scripts)
-// 		   at the location targeted by the request
-// 		b) the request path to the script ends with an extension allowed for CGI
-// 		   (in practice, '.php' or '.py')
-// This function then checks that the CGI script given by the request path
-// exists and is executable, then starts the CGI process :
+// 		(a) the config file allowed Webserv to perform CGI (ie. execute scripts)
+// 			at the location targeted by the request
+// 		(b) the request path to the script ends with an extension allowed for CGI
+// 			<=> for which the config file defined an intepreter
+// 				(in practice, '.php' or '.py')
+// This function then checks that the CGI script given by the request path exists,
+// that the interpreter from config file exists and is executable, then starts the CGI process :
 // 		\ fork a child process that that will use <execve> to launch the script
 // 			with its 'stdout' redirected towards a pipe + its env variables set as parameters
 // 		\ read the CGI output at the receiving end of the pipe, and store it
@@ -559,10 +579,15 @@ int		Response::forkCGI(std::string& fullPath)
 int	Response::handleCGI()
 {
 	std::string	fullPath;
+	std::string	interpreterPath;
 
 	if (this->_request->_toDir)
 		return (this->makeErrorResponse("404 Not Found (CGI to a directory)"));
-	if (this->pathToFile(fullPath, 1, 1, NULL))
-		return (this->makeErrorResponse("404 Not Found (CGI executable not found)"));
-	return (this->forkCGI(fullPath));
+	interpreterPath = this->_location->cgiInterpreted[this->_request->_extension];
+	std::cout << "\tPath to interpreter : " << interpreterPath << "\n";
+	if (access(interpreterPath.c_str(), X_OK) != 0)
+		return (logError("CGI interpreter", 1), this->makeErrorResponse("500 Internal Server Error (invalid CGI intepreter)"));
+	if (this->pathToFile(fullPath, 1, 0, NULL))
+		return (this->makeErrorResponse("404 Not Found (CGI file not found)"));
+	return (this->forkCGI(fullPath, interpreterPath));
 }

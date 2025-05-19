@@ -124,7 +124,7 @@ int	Response::pathToUpload(std::string& fullPath, bool isDir)
 	if (this->_request->_filePath.empty() || this->_request->_filePath[0] != '/')
 		return (1);
 	if (isDir)
-		dirPath = fullPath;
+		dirPath = this->_request->_filePath;
 	else if (divideFilePath(this->_request->_filePath, dirPath, filename))
 		return (1);
 	std::cout << "\tcomputing path to upload : request path has directory path "
@@ -185,6 +185,7 @@ int	Response::buildFullPathFile(std::string& fullPath)
 // Parameters control additional checks and actions :
 // 		\ if <checkFile> is true, check that a regular file exist at the given path
 // 		\ if <checkFile> and <checkExec> are true, check that the file is executable
+// 			(this was used for the previous implementation of CGI, but is now useless)
 // 		\ if <checkFile> is true and <fileSize> is not NULL, stores the file size in <fileSize>
 // Returns 0 when all checks succeed, and
 // 		\ 1 if a check failed (impossible to build path, unsafe resolution, absent file...)
@@ -273,9 +274,7 @@ int	Response::makeSuccessResponse(std::string status)
 
 	std::cout << "[Res::Gen] Generating success response with status " << status << "\n";
 	ss << "HTTP/1.1 " << status << "\r\n"
-		<< "Content-Length: " << (status.size() + 13) << "\r\n"
-		<< "Content-Type: text/html\r\n\r\n"
-		<< "<html>" << status << "</html>";
+		<< "Content-Length: 0\r\n\r\n";
 	responseStr = ss.str();
 	this->makeResponseFromString(responseStr);
 	return (0);
@@ -351,22 +350,18 @@ int	Response::makeErrorResponse(std::string status)
 // Check if the request demands the execution of a CGI script/program, with 2 conditions
 // 		\ request method must be GET or POST
 // 		\ request must target a location and request a file with an extension
-// 		\ request extension must belong to the CGI extensions list of the location
-// 			(extensions will mostly be '.php' or '.py',
-// 			 but any extension can be defined as CGI extension in the config file)
-// [cfg feature] define file extensions to be handled as CGI
+// 		\ request extension must belong to the CGI extensions map of the location
+// 			(for Webserv, extensions will mostly be '.php' or '.py')
+// [cfg feature] define file extensions to be handled as CGI with an interpreter
 bool	Response::isCGIRequest()
 {
-	unsigned int	ind;
+	std::map<std::string, std::string>::iterator	it;
 
-	if (!(this->_location) || this->_location->cgiExtensions.size() == 0
+	if (!(this->_location) || this->_location->cgiInterpreted.size() == 0
 		|| (this->_request->_method != "GET" && this->_request->_method != "POST"))
 		return (0);
-	for (ind = 0; ind < this->_location->cgiExtensions.size(); ind++)
-	{
-		if (this->_request->_extension == this->_location->cgiExtensions[ind])
-			return (1);
-	}
+	if (this->_location->cgiInterpreted.count(this->_request->_extension) > 0)
+		return (1);
 	return (0);
 }
 

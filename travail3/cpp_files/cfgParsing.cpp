@@ -142,8 +142,8 @@ std::ostream&	operator<<(std::ostream& out, const t_location* location)
 // Logs the parameters for 1 location in a virtual server
 void	logLocation(t_location& l)
 {
-	std::set<std::string>::iterator		it1;
-	std::vector<std::string>::iterator	it2;
+	std::set<std::string>::iterator					it1;
+	std::map<std::string, std::string>::iterator	it2;
 
 	std::cout << "\tLOCATION\n";
 	std::cout << "\t\tlocationPath : " << l.locationPath
@@ -157,10 +157,9 @@ void	logLocation(t_location& l)
 	std::cout << "\t\taccepted methods : ";
 	for (it1 = l.acceptedMethods.begin(); it1 != l.acceptedMethods.end(); it1++)
 		std::cout << *it1 << " ";
-	std::cout << "\n\t\tcgis : { ";
-	for (it2 = l.cgiExtensions.begin(); it2 != l.cgiExtensions.end(); it2++)
-		std::cout << *it2 << " ";
-	std::cout << "}\n";
+	std::cout << "\n\t\tcgis :\n";
+	for (it2 = l.cgiInterpreted.begin(); it2 != l.cgiInterpreted.end(); it2++)
+		std::cout << "\t\t\t" << (*it2).first << " : " << (*it2).second << "\n";
 }
 
 // Logs the parameters for 1 virtual server
@@ -239,7 +238,7 @@ int	invalidLocationParams(t_location& l)
 	if (l.redirection.size() > 0
 		&& (l.rootPath.size() > 0 || l.aliasPath.size() > 0 || l.uploadPath.size() > 0
 			|| l.fileWhenDir.size() > 0 || l.autoIndexSet
-			|| l.cgiExtensions.size() > 0 || l.acceptedMethodsSet))
+			|| l.cgiInterpreted.size() > 0 || l.acceptedMethodsSet))
 		return (logError("[loca] redirection with other parameters is invalid\n", 0));
 	if (l.autoIndex && l.fileWhenDir.size() > 0)
 		return (logError("[loca] autoindex ON while default file set is invalid\n", 0));
@@ -250,6 +249,17 @@ int	invalidLocationParams(t_location& l)
 	return (0);
 }
 
+// Adapts a real path from the config file (ie. a path referring
+// to the concrete file arborescence on server device, not the virtual server arborescence)
+// by removing trailing '/', and prepending the PWD if the path was relative
+void	adaptRealPath(std::string& path, const std::string& pwd)
+{
+	if (path[path.size() - 1] == '/')
+		eraseLastChar(path);
+	if (path[0] != '/')
+		path = pwd + "/" + path;
+}
+
 // Extracts data from line in 'location' block,
 // which may only be directives (eg. directive 'root')
 // Some details :
@@ -258,15 +268,16 @@ int	invalidLocationParams(t_location& l)
 // 			at which the file asked requested at this location may be found
 // 		\ 'upload' directive defines path to directory in which uploaded files should be stored,
 // 			if absent upload is forbidden, if present but with empty path then upload path is the same as 'root'/'alias'
-// 		\ 'alias'/'root'/'upload' path must not contain the trailing '/',
-// 			so it is removed if it was incorrectly present
-int parseLineLocation(std::string& line, std::ifstream& inStream, void* storage)
+// 		\ for directives (eg. 'root') where a parameter is a path in the real file arborescence
+// 			~ if the path is relative (not beginning with '/'), <pwd> is prepended to it
+// 			~ if the path has a trailing '/', the trailing '/' is removed
+int parseLineLocation(std::string& line, std::ifstream& inStream, void* storage, std::string& pwd)
 {
 	t_location*					location;
 	std::vector<std::string>	tokens;
 	unsigned int				ind;
 
-	(void)inStream;
+	(void)inStream; (void)pwd;
 	location = reinterpret_cast<t_location*>(storage);
 	splitString(line, tokens, " \t");
 	if (tokens.size() == 0) // should not happen since <parseBlock> skips empty lines
@@ -282,16 +293,14 @@ int parseLineLocation(std::string& line, std::ifstream& inStream, void* storage)
 	{
 		if (tokens.size() != 2 || location->rootPath.size() != 0)
 			return (logError("[loca] invalid 'root' directive\n", 0));
-		if (tokens[1][tokens[1].size() - 1] == '/')
-			eraseLastChar(tokens[1]);
+		adaptRealPath(tokens[1], pwd);
 		location->rootPath = tokens[1];
 	}
 	else if (tokens[0].compare("alias") == 0)
 	{
 		if (tokens.size() != 2 || location->aliasPath.size() != 0)
 			return (logError("[loca] invalid 'alias' directive\n", 0));
-		if (tokens[1][tokens[1].size() - 1] == '/')
-			eraseLastChar(tokens[1]);
+		adaptRealPath(tokens[1], pwd);
 		location->aliasPath = tokens[1];
 	}
 	else if (tokens[0].compare("upload") == 0)
@@ -302,8 +311,7 @@ int parseLineLocation(std::string& line, std::ifstream& inStream, void* storage)
 			location->uploadPath = "~";
 		else
 		{
-			if (tokens[1][tokens[1].size() - 1] == '/')
-				eraseLastChar(tokens[1]);
+			adaptRealPath(tokens[1], pwd);
 			location->uploadPath = tokens[1];
 		}
 	}
@@ -339,16 +347,13 @@ int parseLineLocation(std::string& line, std::ifstream& inStream, void* storage)
 		}
 		location->acceptedMethodsSet = 1;
 	}
-	else if (tokens[0].compare("cgi") == 0)
+	else if (tokens[0].compare("cgi_pass") == 0)
 	{
-		if (tokens.size() < 2 || location->cgiExtensions.size() > 0)
+		if (tokens.size() != 3 || tokens[1].empty() || tokens[2].empty() || tokens[1][0] != '.')
 			return (logError("[loca] invalid 'cgi' directive\n", 0));
-		for (ind = 1; ind < tokens.size(); ind++)
-		{
-			if (tokens[ind].size() < 2 || tokens[ind][0] != '.')
-				return (logError("[loca] invalid value for 'cgi' directive\n", 0));
-			location->cgiExtensions.push_back(tokens[ind]);
-		}
+		adaptRealPath(tokens[2], pwd);
+		location->cgiInterpreted.insert(
+			std::pair<std::string, std::string>(tokens[1], tokens[2]));
 	}
 	else if (tokens[0].compare("client_max_body_size") == 0)
 	{
@@ -389,13 +394,18 @@ int	invalidVserverParameters(t_vserver& vs)
 // Some details :
 // 		\ 'listen' directive must at least contain port number, but interface IP is optional
 // 			(validity of port number checked by our function, validity of IP checked by <inet_aton>)
-// 		\ 'error page' directive must at least contain the path to the error page (last word)
-// 			and 1 (or more) error codes leading to that error page
+// 		\ 'error page' directive can contain one (or more) error codes
+// 		  leading to the error page given in the directive's last word,
+// 			the codes cannot be on range 500-599 and the error page path must be relative
+// 			(the vserver's root path will be prepended to it)
+// 		\ for directives (eg. 'root') where a parameter is a path in the real file arborescence
+// 			~ if the path is relative (not beginning with '/'), <pwd> is prepended to it
+// 			~ if the path has a trailing '/', the trailing '/' is removed
 // /!\ Interpretation of line `vserv->locations.push_back(location);` :
 // 	   this DOES create a new (dynamically allocated) instance of <t_location>,
 // 			since <vserv.locations> is a vector of <t_location> and not of <t_location*>
 // 	   (also applies to the appending a <t_vserver> to the list of virtual servers)
-int parseLineServ(std::string& line, std::ifstream& inStream, void* storage)
+int parseLineServ(std::string& line, std::ifstream& inStream, void* storage, std::string& pwd)
 {
 	t_vserver*							vserv;
 	t_location							location;
@@ -416,7 +426,7 @@ int parseLineServ(std::string& line, std::ifstream& inStream, void* storage)
 			return (logError("[serv] invalid 'location' block start", 0));
 		initLocation(location);
 		location.locationPath = tokens[1];
-		if (parseBlock(inStream, "[loca]", &location, &parseLineLocation))
+		if (parseBlock(inStream, "[loca]", &location, &parseLineLocation, pwd))
 			return (1);
 		if (invalidLocationParams(location))
 			return (1);
@@ -452,13 +462,15 @@ int parseLineServ(std::string& line, std::ifstream& inStream, void* storage)
 	{
 		if (tokens.size() < 3)
 			return (logError("[serv] invalid 'error_page' directive", 0));
+		if (tokens[tokens.size() - 1].empty() || tokens[tokens.size() - 1][0] == '/')
+			return (logError("[serv] invalid 'error_page' path value", 0));
 		for (ind = 1; ind < tokens.size() - 1; ind++)
 		{
 			if (invalidReturnCode(tokens[ind]))
-				return (logError("[serv] invalid value for 'error_page' directive", 0));
+				return (logError("[serv] invalid value for 'error_page' code value", 0));
 			returnCode = static_cast<int>(strtol(tokens[ind].c_str(), NULL, 10));
-			if (returnCode >= 500 && returnCode <= 599) // codes indicating 'server error' can't have an error page
-				return (logError("[serv] invalid value for 'error_page' directive", 0));
+			if (returnCode >= 500 && returnCode <= 599)
+				return (logError("[serv] invalid value for 'error_page' code value", 0));
 			vserv->errorPages.insert(std::pair<int, std::string>(returnCode, tokens[tokens.size() - 1]));
 		}
 	}
@@ -473,8 +485,7 @@ int parseLineServ(std::string& line, std::ifstream& inStream, void* storage)
 	{
 		if (tokens.size() != 2 || vserv->rootPath.size() != 0)
 			return (logError("[serv] invalid 'root' directive", 0));
-		if (tokens[1][tokens[1].size() - 1] == '/')
-			eraseLastChar(tokens[1]);
+		adaptRealPath(tokens[1], pwd);
 		vserv->rootPath = tokens[1];
 	}
 	else
@@ -487,7 +498,7 @@ int parseLineServ(std::string& line, std::ifstream& inStream, void* storage)
 // this function can just call <parseBlock> to parse 'server' blocks
 // 		then checks if the resulting virtual server has no errors, has somewhere to listen on,
 // 		and finally adds it to the list of virtual servers
-int parseLineHttp(std::string& line, std::ifstream& inStream, void* storage)
+int parseLineHttp(std::string& line, std::ifstream& inStream, void* storage, std::string& pwd)
 {
 	std::vector<t_vserver>*	vservers;
 	t_vserver				vserv;
@@ -496,7 +507,7 @@ int parseLineHttp(std::string& line, std::ifstream& inStream, void* storage)
 	if (line.compare("server") == 0)
 	{
 		initVserver(vserv);
-		if (parseBlock(inStream, "[serv]", &vserv, &parseLineServ))
+		if (parseBlock(inStream, "[serv]", &vserv, &parseLineServ, pwd))
 			return (1);
 		if (vserv.listenSet == 0)
 			vserv.portaddrs.insert(t_portaddr(INADDR_ANY, 80));
@@ -524,7 +535,7 @@ int parseLineHttp(std::string& line, std::ifstream& inStream, void* storage)
 // 		\ at block 'server' : structure <t_vserver>
 // 		\ at block 'location' : structure <t_location>
 int	parseBlock(std::ifstream& inStream, std::string blockName,
-	void* storage, int (*lineParser)(std::string&, std::ifstream&, void*))
+	void* storage, int (*lineParser)(std::string&, std::ifstream&, void*, std::string&), std::string& pwd)
 {
 	std::string				line;
 	bool					inBlock = 1;
@@ -541,13 +552,32 @@ int	parseBlock(std::ifstream& inStream, std::string blockName,
 			inBlock = 0;
 		else
 		{
-			if (lineParser(line, inStream, storage))
+			if (lineParser(line, inStream, storage, pwd))
 				return (1);
 		}
 	}
 	if (inBlock)
 		return (logError(blockName + " invalid syntax - braces", 0));
 	return (0);
+}
+
+// Reads lines at the cfg file level, so accepts only 'http' blocks
+// and lets <parseBlock> do the parsing of the 'http' block
+int	parseLineCfg(std::ifstream& inStream, std::string& line,
+	std::vector<t_vserver>& vservers, std::string& pwd)
+{
+	trimString(line);
+	//std::cout << "[base] Line : --" << line << "--\n";
+	if (line.size() == 0)
+		return (0);
+	if (line.compare("http") == 0)
+	{
+		if (parseBlock(inStream, "[http]", &vservers, &parseLineHttp, pwd))
+			return (1);
+		return (0);
+	}
+	else
+		return (logError("[base] unrecognized directive", 0));
 }
 
 // Opens the configuration file and begins its parsing,
@@ -563,15 +593,20 @@ int	parseBlock(std::ifstream& inStream, std::string blockName,
 // 														-> block location		-> directive
 // <=> at the level of the cfg file, a directive or a block other than 'http' is forbidden,
 // 	   at the level of the 'http' block, a directive or a block other than 'server' is forbidden
-// This function reads lines at the cfg file level, so it accepts only 'http' blocks
-// 		and lets <parseBlock> do the parsing of the 'http' block
+// This function registers the current working directory, checks cfg file existence,
+// opens cfg file, and reads it line by line (-> reads at the level of the cfg file)
 int	parseCfgFile(std::string& cfgFileName, std::vector<t_vserver>& vservers)
 {
 	std::ifstream			inStream;
 	struct stat				fileInfos;
 	std::string				line;
+	std::string				pwd;
+	char					pwdBuffer[PATH_MAX];
 
 	std::cout << "<<< PARSING CONFIG FILE " << cfgFileName << "\n";
+	if (!getcwd(pwdBuffer, PATH_MAX))
+		return (logError("[cfg] failed to find PWD", 1));
+	pwd = std::string(pwdBuffer);
 	if (stat(cfgFileName.c_str(), &fileInfos) != 0 || !(fileInfos.st_mode & S_IFREG))
 		return (logError("Config file not found or invalid", 0));
 	inStream.open(cfgFileName.c_str());
@@ -579,17 +614,8 @@ int	parseCfgFile(std::string& cfgFileName, std::vector<t_vserver>& vservers)
 		return (logError("Failed to open config file", 1));
 	while (std::getline(inStream, line))
 	{
-		trimString(line);
-		//std::cout << "[base] Line : --" << line << "--\n";
-		if (line.size() == 0)
-			continue;
-		if (line.compare("http") == 0)
-		{
-			if (parseBlock(inStream, "[http]", &vservers, &parseLineHttp))
-				return (1);
-		}
-		else
-			return (logError("[base] unrecognized directive", 0));
+		if (parseLineCfg(inStream, line, vservers, pwd))
+			return (1);
 	}
 	std::cout << ">>>\n";
 	inStream.close();

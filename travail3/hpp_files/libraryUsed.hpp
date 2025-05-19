@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   libraryUsed.hpp                                    :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: abedin <abedin@student.42.fr>              +#+  +:+       +#+        */
+/*   By: administyrateur <administyrateur@studen    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/30 15:49:54 by ilevy             #+#    #+#             */
-/*   Updated: 2025/05/14 13:42:02 by abedin           ###   ########.fr       */
+/*   Updated: 2025/05/18 14:21:22 by administyra      ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -29,6 +29,7 @@
 # include <limits.h>
 
 // Containers
+# include <algorithm>
 # include <vector>
 # include <map>
 # include <stack>

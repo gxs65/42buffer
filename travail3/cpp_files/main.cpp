@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   main.cpp                                           :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: abedin <abedin@student.42.fr>              +#+  +:+       +#+        */
+/*   By: administyrateur <administyrateur@studen    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/28 15:09:46 by ilevy             #+#    #+#             */
-/*   Updated: 2025/05/16 19:45:16 by abedin           ###   ########.fr       */
+/*   Updated: 2025/05/18 12:20:14 by administyra      ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -69,6 +69,7 @@ int	main(int ac, char **av)
 - /!\ denomination precision : in the webserv program, sockets dedicated to one client
  	are obviously sockets belonging to the server side (we do not control anything on the client side)
 		but they are called <clientSocket> for convenience, to distinguish them from the original main socket
+
 - precise roll-out of TCP protocol between server and ONE client has multiple steps,
 	where the two sides alternately send packets with flags like (mostly) SYN/ACK/FIN to coordinate their data exchange
 		notably at the beginning ("3-way handshake" and HTTPS certificate checks) and at the end (FIN flag)
@@ -98,12 +99,12 @@ int	main(int ac, char **av)
 		the main sockets listening for new connections and the dedicated sockets communicating with a client
 	\ Client : reacts to the POLLIN (POLLOUT) events received on a dedicated socket
 		by reading (writing) into the socket and creating the instances of Request/Response for each request
-	\ Request : parses a HTTP request, and does nothing else (therefore, it has no refs to vservers list)
-	\ Response : generates the response to a given instance of Request, by
+	\ Request : parser class with public attributes
+		~ parsing a HTTP request
 		~ identifying at which location of which virtual server the Request is directed
+	\ Response : generates the response to a given instance of Request, by
 		~ searching this device's arborescence for files / executing CGI scripts
 		~ creating the HTTP response (status code, headers, body)
-
 - handle multiple "virtual" servers :
 	\ by parsing cfg file, we have a set of ports+address on which to read
 	  and a representation of all "virtual" servers by a list of structs (?)
@@ -120,49 +121,9 @@ int	main(int ac, char **av)
 	\ if ending with a '/' <=> a directory : search for an 'index.html' file at this location
 		if there is none and autoindex option is set generate the index, otherwise return 404
 
-- specific names chosen for clarity :
-	\ "portaddr" = a pair constituted by an IP address (int32, potentially 0 for 'any') and a port number (int16)
-		representing an interface and a port to which a socket can listen
-	\ "client" = instances of the class "Client", with an assigned socket,
-		handling all the traffic on that socket (<=> all the communication with 1 client)
-	\ "main socket" = a socket that will always be listening without maintaining any TCP connection
-	  "dedicated socket" = the socket maintaining TCP connection with a client in particular
-  		-> an incoming connection from a client is received on main socket,
-			and the call to <accept> creates the dedicated socket that will communicate with client through TCP
-		/!\ the server polls both main and dedicated sockets, but events on dedicates sockets are handled
-			by the corresponding instance of <Client>
-
-//////////
-// MISC //
-//////////
-
-- differences apres la mise en commun :
-	\ split des methodes de Response entre deux fichiers, un pour les requetes CGI et un pour les autres
-		(il y aura sans doute 3 fichiers a terme vu le travail que va demander l'upload)
-	\ deplacement des methodes <extractFromURL> et <extractFromHost> dans la classe Request,
-		pour qu'elle soit chargee de tout le travail de parsing (et de celui-la seulement)
-	\ passage des attributs de Request en public pour etre plus facilement accessibles :
-		ca me semble justifiable vu que c'est une classe de parsing et non de logique de serveur
-	\ Client recoit les requetes dans une std::string <_requestHeaders> jusqu'a la fin des headers,
-		puis cree une instance de Request qui allouera un char* <_body> pour stocker la suite de la requete (le body)
-	\ Client envoie ses reponses a partir d'un char* qui a ete alloue par une instance de Response qu'il a creee
-	\ dans la gestion de GET/POST/DELETE sans CGI, la recherche du chemin vers le fichier et les autres checks
-		ont ete deplaces dans plusieurs methodes pour que ce soit plus lisible
-- a adapter dans le fichier de conf pour tester en local :
-	\ modifier l'IP sur laquelle ecoute le second serveur (comqnde `ip a` pour IP privee de l'appareil)
-	\ modifier les path definis dans les directives 'alias'/'root'
-
-- lignes de tests pour les differentes requetes, avec `nc` :
-	\ GET (non-CGI) : ```printf "GET /images/truc.html HTTP/1.1\r\nHost:localhost:8080\r\n\r\n" | nc 127.0.0.1 8080```
-	\ POST (non-CGI) : ```printf "POST /images/myfile.txt HTTP/1.1\r\nHost:localhost:8080\r\nContent-Length:3\r\nContent-Type:text/plain\r\n\r\nabc" | nc 127.0.0.1 8080```
-	\ DELETE : ```printf "DELETE /images/myfile.txt HTTP/1.1\r\nHost:localhost:8080\r\n\r\n" | nc 127.0.0.1 8080```
-	\ POST (CGI) : ```printf "POST /app/handleform.py HTTP/1.1\r\nHost:localhost:8080\r\nContent-Length:17\r\nContent-Type: application/x-www-form-urlencoded\r\n\r\nname=aa&surname=b" | nc 127.0.0.1 8080```
-- lignes de test pour un body chunked, avec `nc` :
-	\ POST (non-CGI) : ```printf "POST /images/myfile.txt HTTP/1.1\r\nHost:localhost:8080\r\nContent-Type:text/plain\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nabcde\r\n2\r\nf\n\r\n4\r\npol\n\r\n0\r\n\r\n" | nc 127.0.0.1 8080```
-	\ POST (CGI) : ```printf "POST /app/handleform.py HTTP/1.1\r\nHost:localhost:8080\r\nContent-Type:application/x-www-form-urlencoded\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nna\r\nB\r\nme=antoine&\r\nD\r\nsurname=bedin\r\n0\r\n\r\n" | nc 127.0.0.1 8080```
-- lignes de test d'upload, avec `curl` (sur un fichier "lorem3.txt"):
-	\ POST (non-CGI) chunked : ```curl -v http://localhost:8080/images/new.txt -H "Transfer-Encoding: chunked" --data-binary @lorem3.txt```
-	\ POST (non-CGI) chunked et multipart : ```curl -v http://localhost:8080/images/ -F "file=@lorem3.txt" -H "Transfer-Encoding: chunked"```
+/////////////////////////////////////
+// SPECIFIC IMPLEMENTATION DETAILS //
+/////////////////////////////////////
 
 - gestion de Transfer-Encoding: Chunked
 	\ autoriser l'absence de Content-Length quand le body est chunked
@@ -177,7 +138,7 @@ int	main(int ac, char **av)
 		~ allocation manuelle dans une liste chainee (GNL orig) -> complexe
 		~ enregistrement des donnees dans un fichier temporaire -> tres bien, pas d'utilisation de la RAM !
 
-- sur la gestion des connexions avec le client :
+- gestion des buffers recus par <recv> de la connexion avec le client :
 	\ conditions de fin de requête = "\r\n\r\n" et pas de content length,
 		ou bien "\r\n\r\n" et content length et autant de bytes dans le body que spécifié par content length
 	\ possibilité de "chunked requests" dans HTTP/1.1 : pas de "Content-Length" dans le headers,
@@ -207,7 +168,74 @@ int	main(int ac, char **av)
 	\ CGI resout en redirection CLIENT
 	\ fichier de config requiert redirection CLIENT sur une certaine location 
 	\ client demande une ressource directory sans mettre le trailing '/'
-	  ou une ressource file en mettant le trailing '/' 
+	  ou une ressource file en mettant le trailing '/'
+
+- gestion de l'execution des CGIs : le process de Webserv fork un enfant charge de `execve` le CGI
+	\ probleme de performance : `fork` fonctionne comme s'il copiait tout le processus originel,
+		y compris les donnees sans lien avec ce CGI (par ex des données dédiées à d'autres clients) ;
+	  si la copie s'effectuait vraiment ce serait tres inefficace puisque tout ce qui est copie par `fork`
+	  est ensuite ecrase par `execve`
+	  	mais en realite `fork` fait en sorte que process parent et enfant partage la memoire du process originel
+			et c'est seulement quand l'enfant veut modifier une zone memoire partagee
+			qu'une copie privee (de cette zone memoire uniquement) est cree pour lui ("copy on write", COW)
+	  -> pendant `fork`, seulement le "registre des pages memoires" et le "registre des fd" sont copies,
+	  	donc moins inefficace que prevu meme si ca peut etre non-trivial en cas de gros process original
+	\ alternative : au lieu de fork un process serveur originel deja bien enfle en memoire et fds,
+		faire tourner a cote du process serveur un process specialise en CGI beaucoup moins lourd :
+			le process serveur envoie les CGIs a executer par un pipe,
+			et le process specialise realise le fork (en adaptant les fd I/O comme d'habitude)
+		= exactement la solution utilisee par la methode fastCGI, utilisant soit
+			~ un process CGI specialise forke au lancement du serveur, ecoutant sur un pipe
+			~ un process CGI daemon tournant en permanence, ecoutant sur un socket en boucle interne (ex php-fpm)
+		(autre possibilite : fonction recente <posix_spawn> qui combine `fork` et `execve`
+			en evitant les copies intermediaires inutiles puisque ecrasees par `execve`)
+	\ pour implementation CGI dans Webserv, on peut se contenter de `fork` + `execve` ; entre les deux :
+		~ pas besoin de liberer toute la memoire allouee par le process originel, car `execve` l'ecrasera
+		~ par contre besoin de fermer tous les fds inutiles (notamment fds de sockets)
+		~ et besoin de <chdir> vers le dossier qui contient la ressource executee
+
+////////////////////////////////////
+// UNDERSTANDING AND TESTING CODE //
+////////////////////////////////////
+
+- specific names chosen for clarity :
+	\ "portaddr" = a pair constituted by an IP address (int32, potentially 0 for 'any') and a port number (int16)
+		representing an interface and a port to which a socket can listen
+	\ "client" = instances of the class "Client", with an assigned socket,
+		handling all the traffic on that socket (<=> all the communication with 1 client)
+	\ "main socket" = a socket that will always be listening without maintaining any TCP connection
+	  "dedicated socket" = the socket maintaining TCP connection with a client in particular
+  		-> an incoming connection from a client is received on main socket,
+			and the call to <accept> creates the dedicated socket that will communicate with client through TCP
+		/!\ the server polls both main and dedicated sockets, but events on dedicates sockets are handled
+			by the corresponding instance of <Client>
+- lignes de tests pour les differentes requetes, avec `nc` :
+	\ GET (non-CGI) : ```printf "GET /images/truc.html HTTP/1.1\r\nHost:localhost:8080\r\n\r\n" | nc 127.0.0.1 8080```
+	\ POST (non-CGI) : ```printf "POST /images/myfile.txt HTTP/1.1\r\nHost:localhost:8080\r\nContent-Length:3\r\nContent-Type:text/plain\r\n\r\nabc" | nc 127.0.0.1 8080```
+	\ DELETE : ```printf "DELETE /images/myfile.txt HTTP/1.1\r\nHost:localhost:8080\r\n\r\n" | nc 127.0.0.1 8080```
+	\ POST (CGI) : ```printf "POST /app/handleform.py HTTP/1.1\r\nHost:localhost:8080\r\nContent-Length:17\r\nContent-Type: application/x-www-form-urlencoded\r\n\r\nname=aa&surname=b" | nc 127.0.0.1 8080```
+- lignes de test pour un body chunked, avec `nc` :
+	\ POST (non-CGI) : ```printf "POST /images/myfile.txt HTTP/1.1\r\nHost:localhost:8080\r\nContent-Type:text/plain\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nabcde\r\n2\r\nf\n\r\n4\r\npol\n\r\n0\r\n\r\n" | nc 127.0.0.1 8080```
+	\ POST (CGI) : ```printf "POST /app/handleform.py HTTP/1.1\r\nHost:localhost:8080\r\nContent-Type:application/x-www-form-urlencoded\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nna\r\nB\r\nme=antoine&\r\nD\r\nsurname=bedin\r\n0\r\n\r\n" | nc 127.0.0.1 8080```
+- lignes de test d'upload, avec `curl` (sur un fichier "lorem3.txt"):
+	\ POST (non-CGI) chunked : ```curl -v http://localhost:8080/images/new.txt -H "Transfer-Encoding: chunked" --data-binary @lorem3.txt```
+	\ POST (non-CGI) chunked et multipart : ```curl -v http://localhost:8080/images/ -F "file=@lorem3.txt" -H "Transfer-Encoding: chunked"```
+
+- differences apres la mise en commun :
+	\ split des methodes de Response entre deux fichiers, un pour les requetes CGI et un pour les autres
+		(il y aura sans doute 3 fichiers a terme vu le travail que va demander l'upload)
+	\ deplacement des methodes <extractFromURL> et <extractFromHost> dans la classe Request,
+		pour qu'elle soit chargee de tout le travail de parsing (et de celui-la seulement)
+	\ passage des attributs de Request en public pour etre plus facilement accessibles :
+		ca me semble justifiable vu que c'est une classe de parsing et non de logique de serveur
+	\ Client recoit les requetes dans une std::string <_requestHeaders> jusqu'a la fin des headers,
+		puis cree une instance de Request qui allouera un char* <_body> pour stocker la suite de la requete (le body)
+	\ Client envoie ses reponses a partir d'un char* qui a ete alloue par une instance de Response qu'il a creee
+	\ dans la gestion de GET/POST/DELETE sans CGI, la recherche du chemin vers le fichier et les autres checks
+		ont ete deplaces dans plusieurs methodes pour que ce soit plus lisible
+- a adapter dans le fichier de conf pour tester en local :
+	\ modifier l'IP sur laquelle ecoute le second serveur (comqnde `ip a` pour IP privee de l'appareil)
+	\ modifier les path definis dans les directives 'alias'/'root'
 
 //////////
 // TODO //
@@ -269,9 +297,13 @@ int	main(int ac, char **av)
 + implementer tous les '#f'
 + permettre a la methode DELETE de supprimer des directories
 + faire une fonction dans Request qui check qu'un path ne contient pas de fichiers caches / '.' / '..'
-- gerer la facon dont le tester comprend les CGIs
-	(changer de directory comme requis par sujet)
-- verifier si on doit close des trucs avant le execve
+- correction des CGIs
+	+ gerer la facon dont le tester comprend les CGIs
+	\ changer de directory avant le execve
+	\ close tous les fds sauf 0/1/2 avant le execve
+- ecrire des commentaires dans ResponseUpload
+- verifier comment faire pour ne pas enlever la page apres une Success Response
++ bug bizarre quand la premiere requete recue est un upload multipart
 
 === EN BESOIN DE TESTS POUSSES
 - tests sur l'identification du vserver et de la location :
@@ -305,7 +337,6 @@ int	main(int ac, char **av)
 	\ un compteur de memoire consommee pour refuser les clients quand on atteint une limite ?
 - implementation minimale de la gestion du pipelining :
 	apres avoir recu des octets 'en trop', les stocker pour y revenir au prochain POLLIN
-- implementer la lecture chunk dans des fichiers temporaires plutot qu'avec une allocation
 
 === POSSIBLES AMELIORATIONS POST-CC
 - gestion plus precise des erreurs 400 : si <Request.parse> renvoie 1 pour une erreur,
@@ -325,6 +356,7 @@ int	main(int ac, char **av)
 - gerer proprement la reception des requetes HEAD
 	<=> renvoyer la meme reponse que pour GET, mais sans body)
 - ameliorer la gestion des chemins en separant le filename et directory des le parsing de request
+- implementer la lecture chunk dans des fichiers temporaires plutot qu'avec une allocation
 
 ///////////////////////
 // BEFORE EVALUATION //

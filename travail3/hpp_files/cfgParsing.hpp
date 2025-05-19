@@ -10,7 +10,8 @@
 // 		\ rootPath : path to prepend to URL to get to the right directory in server's arborescence
 // 		\ aliasPath : path to substitute to locationPath in URL (incompatible with <rootPath>)
 // 		\ acceptedMethods : names ('GET', 'POST', ...) of allowed request methods for this location
-// 		\ cgiExtensions : list of file extensions associated that require to execute a CGI
+// 		\ cgiExtensions : map giving, for each file extension to be handled as CGI,
+// 			the path to the interpreter that must be exectuted with the file as argument
 // 		\ uploadPath : absolute path in which uploaded files must be stored
 // 		\ fileWhenDir : path to index file to serve if a GET requests a directory URL
 // 		\ autoIndex : boolean defining wether the server can generate index files itself
@@ -26,7 +27,7 @@ struct s_location
 	std::string							aliasPath;
 	std::set<std::string>				acceptedMethods;
 	bool								acceptedMethodsSet;
-	std::vector<std::string>			cgiExtensions;
+	std::map<std::string, std::string>	cgiInterpreted;
 	std::string							uploadPath;
 	std::string							fileWhenDir;
 	bool								autoIndex;
@@ -57,19 +58,37 @@ struct s_vserver
 	std::string							rootPath;
 };
 
-// Forward declaration
-int				parseBlock(std::ifstream& inStream, std::string blockName,
-					void* storage, int (*lineParser)(std::string&, std::ifstream&, void*));
-
-// External use
-int				portaddrContains(const t_portaddr& portaddrA, const t_portaddr& portaddrB);
-int				parseCfgFile(std::string& cfgFileName, std::vector<t_vserver>& vservers);
+// Misc checks
+int				invalidUintLiteral(std::string& lit);
+int				invalidPortNumber(std::string& portLit);
 int				invalidReturnCode(std::string& codeLit);
-
+bool			blockOpened(std::ifstream& inStream, std::string& blockName);
+// Portaddr manipulation
+int				portaddrContains(const t_portaddr& portaddrA, const t_portaddr& portaddrB);
+void			addPortaddrToVserv(t_vserver& vs, t_portaddr& portaddr);
 // Logs
-void			logWebservConf(std::vector<t_vserver> vservers);
 std::ostream&	operator<<(std::ostream& out, const t_portaddr& portaddr);
 std::ostream&	operator<<(std::ostream& out, const t_vserver* vserv);
 std::ostream&	operator<<(std::ostream& out, const t_location* location);
+void			logLocation(t_location& l);
+void			logVserver(t_vserver& vs, unsigned int vservInd);
+void			logWebservConf(std::vector<t_vserver> vservers);
+// Data structures initialization
+void			initLocation(t_location& l);
+void			initVserver(t_vserver& vs);
+// Parsing by line
+int				invalidLocationParams(t_location& l);
+void			adaptRealPath(std::string& path, const std::string& pwd);
+int 			parseLineLocation(std::string& line, std::ifstream& inStream, void* storage, std::string& pwd);
+int				invalidVserverParameters(t_vserver& vs);
+int 			parseLineServ(std::string& line, std::ifstream& inStream, void* storage, std::string& pwd);
+int 			parseLineHttp(std::string& line, std::ifstream& inStream, void* storage, std::string& pwd);
+// General parsing
+int				parseBlock(std::ifstream& inStream, std::string blockName, void* storage,
+					int (*lineParser)(std::string&, std::ifstream&, void*, std::string&), std::string& pwd);
+int				parseLineCfg(std::ifstream& inStream, std::string& line,
+					std::vector<t_vserver>& vservers, std::string& pwd);
+int				parseCfgFile(std::string& cfgFileName, std::vector<t_vserver>& vservers);
+
 
 #endif

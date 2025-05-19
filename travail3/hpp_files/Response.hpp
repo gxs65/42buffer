@@ -78,16 +78,16 @@ class Response
 		int					parseCGIHeaderLine(std::string& line, std::map<std::string, std::string>& cgiHeaders);
 		int					parseCGIHeaders(std::map<std::string, std::string>& cgiHeaders,
 								std::string& statusCode, std::string& statusDesc);
-		unsigned long		findCGIOutputHeader();
+		int					findCGIOutputHeader(size_t& ind);
 		int					processCGIOutput();
 		// Fork and execute CGI script
 		void				setupCGIEnv(std::string& fullPath, std::map<std::string, std::string>& env);
 		char**				createEnvArray(std::string& fullPath, int* envArraySize);
-		void				childExecuteCGI(std::string& fullPath, int fdInput, int fdOutput);
+		void				childExecuteCGI(std::string& fullPath, std::string& interpreterPath, int fdInput, int fdOutput);
 		int					feedBodyToChild(int fdOutput);
 		int					readResponseFromChild(int fdInput);
 		int					waitForChildCGI(pid_t pid, int* pipeRequest, int* pipeResponse);
-		int					forkCGI(std::string& fullPath);
+		int					forkCGI(std::string& fullPath, std::string& interpreterPath);
 		int					handleCGI();
 		// Generic responses
 		void				makeResponseFromString(std::string& responseStr);
@@ -103,15 +103,16 @@ class Response
 		// Handle POST/PUT/DELETE (non-CGI)
 		int					writeFullBufferInFile(std::string& fullPath, size_t bufferSize, char *buffer);
 		int					uploadFile(std::string& fullPath, unsigned long fileSize, char* fileContent, bool makeResponse);
-		char*				extractMultipartBoundary(size_t& boundarySize);
-		int					handlePostOnePart(std::string& dirPath, char* part, size_t partSize);
-		void				divideMultipart(std::string& dirPath, char* boundary, size_t boundarySize);
-		int					handlePostMultipart();
 		int					handlePostRaw();
 		int					handlePost();
 		int					handlePut();
 		int					handleDeleteOnDir(std::string& fullPath);
 		int					handleDelete();
+		// Handle POST/PUT on multipart bodies
+		char*				extractMultipartBoundary(size_t& boundarySize);
+		int					handlePostOnePart(std::string& dirPath, char* part, size_t partSize);
+		void				divideMultipart(std::string& dirPath, char* boundary, size_t boundarySize);
+		int					handlePostMultipart();
 		// Handle GET on directories
 		int					generateDefaultIndexHtml(std::string& fullPath, std::string& body);
 		int					makeAutoindexResponse(std::string& fullPath);

@@ -1,0 +1,67 @@
+# specific docker compose instructions :
+#     - image names are given a ':user' suffix to make docker build them, instead of pulling them
+#     - each container is member of network 'nw_inception' for inter-container communication
+#         (docker compose would have done it by default, custom network only for clarity)
+#     - container NGINX responsible for handling HTTPS connection on port  of host computer
+#     - 'depends_on' instructions to force build order MariaDB-->WordPress-->NGINX
+
+services:
+
+  mariadb:
+    container_name: mariadb
+    image: mariadb:user
+    build:
+      context: ./mariadb
+    networks:
+      - nw_inception
+    volumes:
+      - mariadb:/var/lib/mysql
+    restart: unless-stopped
+
+  wordpress:
+    container_name: wordpress
+    image: wordpress:user
+    build:
+      context: ./wordpress
+    networks:
+      - nw_inception
+    depends_on: # needs MariaDB running, because WordPress affects databases
+      mariadb:
+        condition: service_healthy # checked with HEALTHCHECK defined in MariaDB Dockerfile
+    volumes:
+      - wordpress:/var/www/html/wordpress
+    restart: unless-stopped
+
+  nginx:
+    container_name: nginx
+    image: nginx:user
+    build:
+      context: ./nginx
+    networks:
+      - nw_inception
+    depends_on: # needs WordPress, but can be setup without having PHP-FPM of wordpress running
+      - wordpress
+    ports:
+      - 8080:8080
+    restart: unless-stopped
+
+volumes:
+  wordpress:
+    name: wordpress
+#    driver: local
+#    driver_opts:
+#      type: none
+#      device: ./wordpress/data # not sure
+#      o: bind
+  mariadb:
+    name: mariadb
+#   driver: local
+#    driver_opts:
+#      type: none
+#      device: ./mariadb/data # not sure
+#      o: bind
+
+networks:
+  nw_inception:
+    driver: bridge
+    name: nw_inception

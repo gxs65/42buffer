@@ -5,7 +5,7 @@
 #				 without authenticating with a password
 # 					(other non-root process, eg. the healthcheck process, could not do this)
 
-# start mariadb server
+# start mariadb server to be able to setup the databases through the client
 # (need sleep line, otherwise next lines with mariadb client start to execute while mariadb server is not up)
 service mariadb start
 sleep 5
@@ -14,10 +14,17 @@ sleep 5
 # 	- create database
 # 	- create user for WordPress
 # 	- give privileges on database to WordPress user
+# 	- create dummy user with 0 privileges for healthcheck tests
+# /!\ Values for usernames and passwords :
+# 	- username of user for WordPress is retrieved from env
+# 	- password of user for WordPress is retrieved from docker secrets
+# 	- password and username of dummy user are hardcoded
+export MDB_USER_WP_PASSWORD=$(cat /run/secrets/mdb_user_wp_password)
 mariadb -u root <<EOF
-CREATE DATABASE IF NOT EXISTS db_inception;
-CREATE USER IF NOT EXISTS user_wp_inception@'%' IDENTIFIED BY 'safepwd';
-GRANT ALL PRIVILEGES ON db_inception.* TO user_wp_inception@'%';
+CREATE DATABASE IF NOT EXISTS \`$MDB_INCEPTION_DB\`;
+CREATE USER IF NOT EXISTS '$MDB_USER_WP'@'%' IDENTIFIED BY '$MDB_USER_WP_PASSWORD';
+GRANT ALL PRIVILEGES ON \`$MDB_INCEPTION_DB\`.* TO '$MDB_USER_WP'@'%';
+CREATE USER IF NOT EXISTS user_healthcheck@'%' IDENTIFIED BY 'safepwd';
 FLUSH PRIVILEGES;
 EOF
 
@@ -26,5 +33,5 @@ EOF
 # 	- with "port" and "bind-address" options to make certain it listens on port 3306
 # 	- with "datadir" option to make certain it stores its data in the volume
 mysqladmin -u root shutdown
-echo "MARIADB CONTAINER - end of bash config script, now running mysqld_safe"
-mysqld_safe --port=3306 --bind-address=0.0.0.0 --datadir='/var/lib/mysql'
+echo "MARIADB CONTAINER - end of bash config script, now running mysqld"
+exec mysqld --port=3306 --bind-address=0.0.0.0 --datadir='/var/lib/mysql'

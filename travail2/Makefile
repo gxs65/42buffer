@@ -4,8 +4,8 @@ all: up
 # 	("-d" option to put containers in background instead of 'attaching' to them)
 # "docker-compose down" will remove containers and networks, but not images and volumes
 up:
-	mkdir -p mariadb/data
-	mkdir -p wordpress/data
+#	mkdir -p mariadb/data
+#	mkdir -p wordpress/data
 	docker-compose -f ./docker-compose.yml up -d
 down:
 	docker-compose -f ./docker-compose.yml down
@@ -19,6 +19,8 @@ rmi:
 	docker image rm mariadb:user || true
 	docker image rm wordpress:user || true
 	docker image rm nginx:user || true
+	docker image rm redis:user || true
+	docker image rm vsftpd:user || true
 rmv:
 	docker volume rm mariadb || true
 	docker volume rm wordpress || true
@@ -27,6 +29,7 @@ rmv:
 #	rm -rf mariadb/data/*
 #	rm -rf wordpress/data/*
 clean: down rmi rmv
+re: clean up
 
 check_existing:
 	docker ps -a
@@ -68,7 +71,7 @@ check_existing:
 # 		- create a network and make cont_mariadb member
 # 		- run another container on same network, 'apt-get update' + install mariadb-client
 # 		- connect to mariaDB server using : 
-# 		  mariadb -u user_wp_inception --password=safepwd -h cont_mariadb -P 3306
+# 		  mariadb db_inception -u user_wp_inception --password=safepwd -h cont_mariadb -P 3306
 # ---
 # sample_run_mariadb:
 # 	docker image build mariadb/ -t mariadb

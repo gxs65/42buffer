@@ -1,0 +1,157 @@
+# specific docker compose instructions :
+#     - image names are given a ':user' suffix to make docker build them, instead of pulling them
+#     - each container is member of network 'nw_inception' for inter-container communication
+#         (docker compose would have done it by default, custom network only for clarity)
+#     - container NGINX responsible for handling HTTPS connection on port  of host computer
+#     - 'depends_on' instructions to force build order MariaDB-->WordPress-->NGINX
+
+services:
+
+# main services
+
+  mariadb:
+    container_name: mariadb
+    image: mariadb:user
+    build:
+      context: ./mariadb
+    networks:
+      - nw_inception
+    volumes:
+      - mariadb:/var/lib/mysql # database persistent storage
+    env_file:
+      - app_params/env_inception
+    secrets: # access to password of MariaDB user for WordPress
+      - mdb_user_wp_password
+    restart: unless-stopped
+
+  wordpress:
+    container_name: wordpress
+    image: wordpress:user
+    build:
+      context: ./wordpress
+    networks:
+      - nw_inception
+    depends_on:
+      mariadb: # needs MariaDB running, because WordPress setup affects databases
+        condition: service_healthy # checked with HEALTHCHECK defined in MariaDB Dockerfile
+      redis: # needs Redis running, because WordPress has been setup with Redis Cache plugin
+        condition: service_healthy # checked with HEALTHCHECK defined in Redis Dockerfile
+    volumes:
+      - wordpress:/var/www/html/wordpress # access to WordPress files to run PHP scripts
+    env_file:
+      - app_params/env_inception
+    secrets: # access to passwords of MariaDB user for WordPress, and WordPress users
+      - mdb_user_wp_password
+      - wp_user_admin_password
+      - wp_user_subsid_password
+    restart: unless-stopped
+
+  nginx:
+    container_name: nginx
+    image: nginx:user
+    build:
+      context: ./nginx
+    networks:
+      - nw_inception
+    depends_on: # needs WordPress, but can be setup without having PHP-FPM of wordpress running
+      - wordpress
+    ports:
+      - 8080:443
+    volumes:
+      - wordpress:/var/www/html/wordpress # to serve WordPress static files (and see that PHP scripts exist)
+      - speedtest:/var/www/html/speedtest # [BONUS] (to see that Speedtest PHP scripts exist)
+    env_file:
+      - app_params/env_inception
+    restart: unless-stopped
+
+# bonus
+
+  redis:
+    container_name: redis
+    image: redis:user
+    build:
+      context: ./bonus/redis
+    networks:
+      - nw_inception # receives on port 6379 requests from WordPress container
+    restart: unless-stopped
+  
+  vsftpd:
+    container_name: vsftpd
+    image: vsftpd:user
+    build:
+      context: ./bonus/vsftpd
+    networks:
+      - nw_inception # in order to test vsftpd container from redis container
+    volumes:
+      - wordpress:/var/www/html/wordpress
+    depends_on:
+      wordpress: # needs WordPress files installed, because FTP user must belong to group owning them
+        condition: service_healthy # checked with HEALTHCHECK defined in WordPress Dockerfile
+    ports:
+      - 8081:21
+    secrets: # for creation of FTP user with same username and password as WordPress admin
+      - wp_user_admin_password
+    env_file:
+      - app_params/env_inception
+    restart: unless-stopped
+  
+  adminer:
+    container_name: adminer
+    image: adminer:user
+    build:
+      context: ./bonus/adminer
+    networks:
+      - nw_inception
+    depends_on:
+      mariadb: # needs MariaDB running, because it is used to access the WordPress database in it
+        condition: service_healthy # checked with HEALTHCHECK defined in MariaDB Dockerfile
+    restart: unless-stopped
+  
+  speedtest:
+    container_name: speedtest
+    image: speedtest:user
+    build:
+      context: ./bonus/speedtest
+    networks:
+      - nw_inception
+    volumes:
+      - speedtest:/var/www/html/speedtest
+    restart: unless-stopped
+
+# =====
+
+volumes:
+  wordpress:
+    name: wordpress
+#    driver: local # not bound to specific host dir for now
+#    driver_opts:
+#      type: none
+#      device: ./wordpress/data
+#      o: bind
+  mariadb:
+    name: mariadb
+#   driver: local # not bound to specific host dir for now
+#    driver_opts:
+#      type: none
+#      device: ./mariadb/data
+#      o: bind
+  speedtest: # [BONUS]
+    name: speedtest
+#    driver: local # not bound to specific host dir for now
+#    driver_opts:
+#      type: none
+#      device: ./speedtest/data
+#      o: bind
+
+networks:
+  nw_inception:
+    driver: bridge
+    name: nw_inception
+
+secrets:
+  mdb_user_wp_password:
+    file: app_params/mdb_user_wp_password
+  wp_user_admin_password:
+    file: app_params/wp_user_admin_password
+  wp_user_subsid_password:
+    file: app_params/wp_user_subsid_password

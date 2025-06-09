@@ -1,0 +1,19 @@
+# Name of Inception database, managed by MariaDB and used/accessed by WordPress
+MDB_INCEPTION_DB=inception_db
+# Username of the MariaDB as which WordPress will act when accessing Inception database
+MDB_USER_WP=wordpress_user
+
+# Username of the WordPress admin
+WP_USER_ADMIN=fortinbras
+# Username of the WordPress subsidiary user
+WP_USER_SUBSID=rosencrantz
+
+# Domain name of the website
+DOMAIN_NAME=abedin.42.fr
+# Base URL of the website
+BASE_URL=https://abedin.42.fr
+
+# [BONUS]
+
+# Username when connecting to FTP server :
+# same username and passwd as WordPress admin

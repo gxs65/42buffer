@@ -1,0 +1,595 @@
+##########
+
+# Inception - Documentation notes
+
+## Intro - General description of Docker
+
+- Docker is :
+	\ [concretely, for Inception] a program that creates containers where applications can run in a custom environment
+		-> uses "containerization" (a partial virtualization) without the overhead of a whole virtual machine,
+			because it lets the containers access the host OS kernel instead of simulating a virtual one
+	\ [more generally] a tool that creates/packages/ships applications in the form "images",
+		from which the containers, standardized units able to work on any system, can be run
+			-> many applications are available in Docker image form on public repositories like DockerHub
+- usage of Docker on a host computer :
+	\ once installed, it runs as a daemon just like "ssh" or "cron" (= 'server' side)
+		-> can be seen with "service --status-all", can be stopped/started with "systemctl"
+	\ instructions are given by the user to the daemon through command line with commands "docker ..." (= 'client' side)
+		which affect only docker objects (images, containers...) owned by this user
+	/!\ 'server-client' metaphor used to describe the structure, but client and server side are one the same device :
+		docker daemon is NOT listening on a port (like eg. ssh) for incoming connections from remote clients,
+		instead by default it listens on a UNIX domain socket, which only the docker client on the same device can reach
+			(but docker daemon settings can be altered to allow it to listen on a port)
+- to achieve "isolation" of running containers without a full virtual machine,
+  Docker uses low-level Linux kernel features developed over a long period of time to meet demands for isolated environments :
+	\ for filesystem isolation <=> a container cannot access the host's filesystem (directly) :
+		"chroot" feature redefining what is the root directory for a process
+	\ for process isolation <=> a container cannot see other processes running on host OS :
+		"namespaces" feature redefining the process tree for a specific process
+			(+ also allows to isolate various less substantive elements like hostname, mount points, network routing)
+	\ for resource isolation <=> a container can consume only a limited part of host's resources :
+		"control groups (cgroups)" feature to assemble processes into groups and limiting group resources access
+  -> creating a container requires using all these tools, which can be complex and require a lot of precautions,
+	so docker automates it into a single containerization interface
+/!\ consequence of this 'lightweight' isolation : what happens inside containers is fully visible on host,
+	eg. processes running inside containers are genuine processes in the host perspective, visible with `ps -e`
+		(obviously on the other hand the container sees only its processes, and not all processes running on host)
+
+- terminology for describing what is done with Docker :
+	\ "images" = base state for containers ; "container" = an active instance of an image, running some application
+	\ command "docker build ..." creates an image following directives from a dockerfile
+	  command "docker run IMAGE ..." instantiates and executes a new container from the given docker image
+		("run" has options to override any directive from the docker image, if the user wants to)
+	\ "host/physical X" refers to the X of the host computer (on which Docker runs)
+	  "container/virtual X" refers to the X inside a container (ie. inside the custom environment created by Docker)
+	\ component [defined specifically for Inception] = one part of multi-container application : NGINX, MariaDB, WordPress
+- useful general docker commands (see list with "docker help") :
+	\ "docker ps -a" : see all existing containers (owned by user), including stopped containers
+	\ "docker logs" : see docker logs for debug
+	\ "docker container run/stop/start/rm" : manage a container
+	\ "docker image pull IMAGE" : pull the given image from a public Docker respository (not allowed for Inception)
+	\ "docker image ls/build/inspect/rm" : see all existing docker images, manage a docker image
+	\ "docker volume ls/create/inspect/rm" : see all existing docker volumes, manage a docker volume
+	\ "docker run -it --rm --name testContainer debian:bullseye" : quick way to get a test container running on Debian
+		("-t" will give the user a terminal inside the container, "-i" will keep it open, "-rm" will destroy the container after use)
+	  "docker exec -it my_container sh" : quick way to get a shell running inside the container
+- the Inception application would typically comprise :
+	\ for each component (NGINX, WordPress, MariaDB) :
+		~ a dockerfile defining its docker image, (potentially) mentioning a volume for persistent storage
+		~ (potentially) a configuration bash script to be executed inside the container when it starts
+	\ one docker compose file defining and running the multi-container application, using docker "networks" and "volumes"
+	\ one Makefile to create directories and launch "docker-compose" commands
+
+## I - Specific details about the components (NGINX, MariaDB, WordPress)
+
+- in this section, description of miscellaneous interesting details encountered in the components
+	-> not directly useful for Inception completion, but helps to understand how the whole application behaves
+
+### A. NGINX : HTTPS and TLS Certificates
+
+- to run inside container, NGINX will need a config file defining the features of the server,
+	the directives of this file are very similar to the directives handled in Webserv,
+		except that NGINX will use HTTPS protocol instead of HTTP (thus listen on port 443 instead of 80)
+- HTTPS = extension of HTTP to create between server and client "a secure connection over an insecure network"
+	<=> even when adversaries can intercept packets and read/modify them on the network, protocol ensures that
+		(a) adversaries won't be able to understand the data transported by the packets
+		(b) adversaries can't 'impersonate' the server, ie. they can't interact with the client
+		    while making the client believe he is interacting with the server
+	+ if possible, (c) the process achieving should be fast, because it will be repeated for each new TCP connection
+- protocol that respects (a)+(b)+(c) is TLS = Transport Layer Security
+	\ located at layer 6 [presentation] of OSI model (so the "Transport Layer" in the name is misleading),
+		between layers 5 TCP [session] and 7 HTTP [application]
+			<=> layers TCP and below (IP frame, ethernet framed) are not affected by encryption
+	\ sufficiently fast because it adds only 4 messages at the beginning of each TCP connection
+		during the "TLS handshake" happening just after the TCP connection
+  /!\ HTTPS is main user of TLS, but TLS can be used for other application protocols (eg. FTP becomes SFTP with TLS)
+
+#### Constraint (a) : encryption of HTTP data
+
+- to respect (a), HTTP data sent in packets over the TLS-secured connection will be "encrypted" according to a session encryption
+	-> only the client and server know the session encryption mechanism and can use it to encrypt/decrypt
+- the specific encryption algorithm used for session encryption is not relevant,
+  it will be chosen by server during TLS handshake among options offered by client,
+	the only constraint is : it must be derived entirely from a single value called "premaster key"
+		(eg. Vigenere, if it were less easy to break, could serve as session encryption,
+		 since it only requires a key text for encryption/decryption -> the premaster key can be this key text)
+- thus, to achieve secure connection with the server, client must simply send to the server a premaster key
+	using a method where nobody can intercept this premaster key (and derive the session encryption from it)
+		<=> the premaster key is a "shared secret" between client and server
+- TLS establishes the premaster key during TLS handshake using the standard way to generate a shared secret :
+  asymmetric cryptography, usually using RSA algorithm for key generation
+	\ server generated at its birth a public/private keys couple (see Wikipedia "RSA encryption") :
+		public key (n, e) and private key (n, d) such that `(m^e % n)^d % n == m`
+			where m is a number, but can encode a real message using ASCII to convert chars to numbers
+	\ so when client requests TLS-secured connection with server, server 'answers with the public key',
+		client can chooses a random premaster secret, encrypts it using the public key, sends it to server,
+			and finally server decrypts the message using its private key to get premaster secret
+	/!\ server's public key is used only to encrypt and transmit premaster secret,
+		then it is not used at all for session encryption
+
+#### Constraint (b) : server authentication
+
+- to respect (b), HTTPS client must be certain that the counterpart is really the server it pretends to be
+	and not a "man-in-the-middle" (MITM) attacker impersonating the server by intercepting messages sent by client to server
+- TLS uses the combination of asymmetric cryptography and third party certificates to authenticate a server :
+	when server 'answers with the public key' to the client, actually it sends a certificate
+		containing the public key + a "digital signature" from a "certificate authority"
+	where "certificate authority" (CA) is a third party trusted by both client and server,
+		either a for-profit (eg. DigiCert) or non-profit organization (eg. Let's Encrypt) specialized in this activity
+	-> if the certificate is valid, it makes certain that the contained public key is bound to the requested domain name
+		/!\ certificates are public, server sends it for conveniency but anyone has access to them
+- [prerequisite] since RSA public/private keys are commutative, a keys couple can be used in 2 ways :
+	\ classic : anyone can encrypt WITH PUBLIC KEY a message that only the owner of the private key will be able to decrypt
+	\ digital signature : the owner of the private key is the only one able to encrypt WITH PRIVATE KEY
+		something that anyone can decrypt WITH PUBLIC KEY
+  -> in practice, message's author proves authenticity thanks by attaching to the message the digital signature
+     which is just the hash of the normal non-encrypted message, encrypted WITH PRIVATE KEY
+	so the recipient can decrypt the signature WITH PUBLIC KEY, and check that the hash found matches the hash of the message
+  -> in the case of CA signatures on certificates, client browser softwares maintain a list of public keys of trusted CAs,
+     so when client receives certificate digitally signed by CA, it retrieves the CA's public key from the list for the check
+- thus full process for differentiating server from a MITM attacker is :
+	\ client receives certificate containing a public key,
+	  ascertains certificate validity by checking CA's signature (using CA public key from its list of trusted CA)
+		-> makes sure that the public key in the certificate is in fact bound to the requested domain name and server :
+	|_ MITM attacker cannot forge a certificate with the requested domain name and his own public key,
+	   since it it would lack CA's signature
+		/!\ but MITM attacker could still be the counterpart and have answered with the true certificate (it is public)
+	\ client uses the certificate's public key to encrypt the premaster secret, sends it to the server
+		-> makes sure that only the owner of the private key corresponding to certificate's public key
+		   will be able to decrypt and use the premaster key
+	|_ even if it answered with the true certificate, MITM cannot benefit of his position
+	   since he does not possess the private key to decrypt the premaster key
+
+#### Full unrolling of TLS handshake
+
+- only 4 messages to transmit certificate for (b) and setup the premaster key for (a) + (b)
+1. client to server : client hello message = TLS versions supported + session encryption methods supported + hashs supported
+2. server to client : server hello message = TLS version chosed + session encryption methods chosen + hash chosen
+					     + certificate with CA signature and public key
+[client checks certificate]
+3. client to server : message containing premaster secret encrypted to public, notification to switch to session encryption
+4. server to client : notification to switch to session encryption
+[application layer messages = HTTP messages encrypted with session encryption]
+
+### B. MariaDB : SQL syntax for interaction with databases
+
+- once installed, MariaDB runs as a daemon accessible through terminal with command "mariadb"
+  (same server-client structure as for eg. docker, except listens on remote connections on port 3306 by default, cf. section II)
+	and command "mariadb", with '-u username' + '-p password' + the database name as arguments,
+	opens a CLI expecting SQL instructions to interact with targeted database
+- this section gives basic description of SQL instructions that could be used for Inception,
+	see MariaDB man pages at "mariadb.com" for deeper explanations and options
+- instructions for managing users (MariaDB users list represented in a database named "mysql",
+  which is modified by these commands and and by user 'root')
+	\ creation : "CREATE USER user_name IF NOT EXISTS IDENTIFIED BY 'password';"
+	\ assigning rights : "GRANT ALL PRIVILEGES ON *.* TO user_name;" (+ "FLUSH PRIVILEGES" for applying changes)
+  (those are the only commands needed for inception :
+	we just need to create a user, with sufficient privileges, as which WordPress will act,
+   		then WordPress will execute all the SQL instructions described in the next points)
+- instructions for creating database and its tables :
+	\ database : "CREATE DATABASE IF NOT EXISTS database_name;"
+	\ (select a database if none selected : "USE database_name;")
+	\ table : "CREATE TABLE IF NOT EXISTS table_name (column1, colums2, ..., columnN);"
+	|_ each "column" described with : "name type options", where most important options are :
+		~ "PRIMARY KEY" -> the value of this column uniquely identifies the entry
+		~ "AUTO INCREMENT" -> each new entry should get as value of this column the value of last entry plus one
+- instructions for modifying database :
+	\ insertion : "INSERT INTO table_name (column1, columm2)
+		       VALUES (valuesAcol1, valuesAcol2),  (valuesBcol1, valuesBcol2), (valuesCcol1, valuesCcol2);"
+	|_ where "columns" can be any subset of the table's column
+		and each entries' values must be given in the same order as "columns"
+	\ editing : "UPDATE table_name SET column1 = newvalue WHERE column2 = searchvalue;" ("column1" may be same as "column2")
+	\ deleting : "DELETE FROM table_name WHERE column = searchvalue;"
+- instructions for querying database : "SELECT column1, column2 FROM table", with :
+	\ WHERE clause followed by "column = searchvalue"
+	\ LIMIT clause followed by max number of lines returned
+	\ JOIN clause followed by "other_table_name USING (column3)" to join columns from another table
+		that uses "column3" as primary key ("column3" present in both other table and current table)
+	\ ORDER BY clause followed by "column" to sort returned line according to value of "column"
+
+### C. WordPress CGI setup
+
+- WordPress = open-source Website Content-Management System (CMS), with the specificity that
+	\ all website content is stored in a SQL database, and retrieved by PHP scripts
+	\ requests to the website invoke a single PHP script which parses the URL to determine the content to served
+	\ content management is done through the website itself, on a browser
+- regular visitors access the public website as usual with URLs,
+	while website owner accesses the website administration page with the URL to page "/wp-admin.php"
+  -> since the website owner interacts with WordPress on a browser that sends form data,
+	its management actions (including database manipulation) are done by PHP scripts
+- so handling requests to the WordPress website requires using CGI to launch PHP script,
+	which is impossible to achieve by using standard CGI in a containerized structure like Inception
+		since the NGINX container would have to launch PHP scripts inside the WordPress container !
+- fortunately instead of standard CGI (not implemented by NGINX anyway) we can use FastCGI, created to improve CGI efficiency :
+	server software (eg. NGINX) does not fork a process at each CGI,
+		but forwards the request to a daemon running in background
+			responsible for running the CGI script efficiently and returning the response into a UNIX domain socket
+	-> for Inception, (1) we use the PHP daemon PHP-FPM, and (2) it can listen inside the WordPress container
+		for requests forwarded by the NGINX server inside the NGINX container
+- so container WordPress in Inception will have to communicate with both other containers
+	\ with NGINX container : receive and send HTTP requests/responses
+	\ with MariaDB container : access the database containing the website's content
+
+## II - Role of Docker
+
+- in this section, general explanation of the Docker features
+	that enable containerizing and connecting the application components
+- [prerequisite] UNIX domain socket = 'file-based inter-process communication mechanism' allowing duplex communication :
+	the socket created by 'server side' process is bound not to {IP address + port number}, but to a tmp file on the device
+		(in C system calls, <socket(AF_UNIX, ...)> then bind to UNIX domain socket with <bind(..., socket_filename, ...)>)
+	then 'client side' process connects its unbound socket to it
+		(in C system calls, <socket(AF_UNIX, ...)> then connect with <connect(..., socket_filename, ...)>)
+	-> 'client side' process must know the path to the UNIX domain socket created by the 'server side'
+		(eg. "/var/run/docker.sock")
+- how the different services would 'get executed' in a vanilla setup, without containerization :
+	\ MariaDB : mariadb "server side" runs in background as daemon,
+		listens on UNIX domain socket AND on network socket on port 3306,	
+			for requests by same-device clients or remote mariadb clients
+	\ WordPress / PHP-FPM : PHP-FPM "back-end server" runs in background,
+		listens on UNIX domain socket to launch (as CGI) PHP scripts of the WordPress website
+	\ NGINX : launched with command "nginx", then runs indefinitely in fore/background (can be stopped by signal)
+(side note : like MariaDB, Docker has a background as daemon "server side",
+	which listens on UNIX domain socket, for requests by same-device docker client)
+
+### A. Inter-container communication through Docker networks
+
+- the Inception setup, where components are containerized, must ensure the corresponding communications
+  (see subject for visual representation) :
+	\ MariaDB :				receive on port 3306 SQL instructions by WordPress container
+	\ WordPress / PHP-FPM :	receive on port 9000 requests for PHP execution by NGINX container
+							send to MariaDB container (port 3306) SQL instructions from WordPress PHP scripts
+	\ NGINX :				receive on port 443 HTTPS requests from local or remote clients, forwarded by the host computer
+							send to WordPress container (port 3306) HTTPS requests ending with 'php'
+  -> how to allow this inter-container communication when, by def, each container's network stack is isolated from the others ?
+- docker tool dedicated to this task = docker networks :
+  transmission object that manages communications between containers / computer host / outside world
+	\ each docker network has a list of member containers,
+		each member container gets an IP address + a domain name equal to its container name (see "docker inspect <network>")
+	<=> from inside cont1, the name of cont2 is a valid host name, thanks to a custom docker DNS server for containers :
+		when some process in cont1 wants to connect to a remote host defined with {IP + port} "cont2:8080",
+			docker DNS server is searched for matches with hostname "cont2", and IP of cont2 is found
+	\ networks created with "docker network create network_name" ("docker network ls" for list of networks),
+	  container made member of network with command "docket network connect network_name container_name"
+		(but commands not used for Inception specifically, since they will be automated with docker-compose)
+	\ works (sort of) by altering the "iptables" configuration of the host computer and the containers :
+		packets with a member container as destination get redirected by "iptables" to the network,
+			which sends them to the correct container (instead of releasing them on the internet)
+	\ options for "network driver" type :
+		~ bridge (most common) : member containers distinct from host, see host and each other with different IP address
+		~ macvlan : like bridge, but additionnally member containers get MAC address as if they had a physical interface
+		~ host : no isolation between containers' and computer host's network stacks, they are the same
+			(eg. if a container binds a socket on port 80, it receives all that comes on host's port 80,
+			 with no forwarding, and host can't use port 80)
+		~ none : total network isolation <=> member containers cannot connect to anything, not even internet
+- so to connect Inception containers, usual network stack and UNIX sockets are replaced by docker networks :
+	\ connection to internet (necessary to install new packet inside the container) : easy,
+		by default new containers are member of a permanent bridge network (visible with "docker network ls")
+			which makes them access the host computer and connect to internet through it 
+	\ connection to other containers : simply make all containers member of a bridge network named "inception_network"
+	  	and they will be able to see each other as hosts with their container name as hostname
+			eg. NGINX server, instead of sending PHP requests to PHP-FPM UNIX socket,
+			would send them to port 9000 of WordPress container that runs PHP-FPM
+	/!\ no need to expose ('publish') relevant ports of each container (3306 in MariaDB, 9000 in WordPress)
+	    to make the container accept incoming connections on custom ports :
+		here, docker allows all traffic from one container to another on the same network
+	\ forwarding of connections received by host computer on port 443 (HTTPS) to NGINX container's port 443
+	  (akin to port forwarding in Born2BeRoot) :
+		configurable through docker-compose file, or with publish option "-p host_port:container_port"
+			(eg. here "-p 443:443") #f : need to publish port 443 of container ?
+- quick example : command "docker network create demo-network -d bridge" to create network,
+	then "docker run -it --rm --name cont1/2 --network demo-network busybox:latest" to create 2 containers members of network
+		-> running "ping cont2" inside "cont1" will work, container 1 can 'discover' container 2 through "demo-network"
+		-> running "ping google.com" will work, containers can connect to internet through default bridge network
+
+### B. Persistent storage through Docker volumes
+
+- each time "docker run" instantiates a container, it is a new container with a new empty virtual filesystem, so
+	(1) data stored in the virtual filesystem of a container will disappear once the container is removed
+	(2) data stored and managed by a container is unavailable to other containers (and to the host OS)
+  -> for persistent and shared data, instead make containers store data on the (permanent) physical filesystem, with mounting :
+	a SOURCE directory of physical (<=> host's) filesystem is mounted on a DEST directory of virtual filesystem
+		<=> all data written in DEST by container application is in fact written in SOURCE on physical filesystem, so
+	(1) the next time a container runs the application with the same mounting, it will access data from previous runs
+	(2) all containers with a part of their filesystem mounted the same way can share data
+  (to avoid the user having to manage and remember what is physical SOURCE directory, Docker can take care of it
+   and lets user simply define "volumes" of data, and the place DEST where a volume is mounted on container's virtual filesystem)
+- BUT important difficulty : files created inside volume by a process running in the container
+  get a UID (owner) and GID (group) equal to the UID of the 'container user' running the process
+	-> this UID (usually a big number) DOES NOT exist on the host computer level,
+	   but the files still keep the incoherent UID and GID when inspected at host computer level,
+	   		therefore no host computer user can remove them except 'root' !
+  solutions to be able to remove the files inside the volume once they become useless :
+	1. do not define a specific branch of host filesystem to locate volume,
+		instead let docker choose the volume's location (will usually put it in '/tmp')
+		so that docker is also responsible for deleting all those volumes when calling `docker compose down`
+			/!\ storage persistence lost -> not allowed for Inception
+	2. accept that only 'root' on host computer level can modify volume files, and delete them with 'sudo rm'
+			/!\ not very clean, will require entering root pwd multiple times
+	3. in the dockerfiles, create a new 'container user' with the same UID as the normal user on computer host level,
+	   and use dockerfile instruction 'USER' to make it the user for all processes inside the container
+			-> files in volume will have same UID/GID as normal host user, who will be able to delete them
+
+### C. Containers processes and PID 1
+
+- what exactly does a docker container 'contain' ? simply one or more processes :
+	when started from an image with command "docker run", docker container creates a process with PID 1
+		executing the command/script given in dockerfile's ENTRYPOINT or CMD directive
+	\ if no ENTRYPOINT/CMD given but "docker run" has "-i" option, starts a "sh" process (shell) instead ;
+	  if no ENTRYPOINT/CMD given and no "-i" option, container stops immediately
+	\ difference between syntaxes of ENTRYPOINT/CMD :
+		~ `ENTRYPOINT [ "cmdpart1", "cmdpart2", ... ]` : classic form, process with PID 1 is the given cmd itself
+		~ `ENTRYPOINT "cmdpart1 cmdpart2 ..."` : shell form, process with PID 1 is a shell, and it executes the given cmd
+	\ 'original process' can then fork multiple concurrent processes (running in foreground) inside the container
+		(eg. for Inception, NGINX process will fork multiple worker processes)
+	\ container dies only when the process with PID 1 exits (+ may be set to restart if exited with anything else than 0)
+		-> if process with PID 1 exits while children processes are still running, children are ignored and killed
+			<=> if ENTRYPOINT/CMD launches the application as a child and then exits without waiting for child, the container stops !
+		hence when ENTRYPOINT/CMD is a shell ('sh'/'bash'),
+		it needs to launch applications (<mariadb>, <nginx>, <php-fpm>) in the FOREGROUND :
+			this way, shell (= process with PID 1) WAITS for the child exit before exiting itself
+		/!\ potential even better solution : instead of launching commands the usual way forking childs (cf. Minishell),
+			make the shell process with PID 1 'transform' into the application with <exec> !
+	\ what 'docker container stop' really does is : make the process with PID 1 exit by sending SIGTERM
+		<=> process with PID 1 should be ready to accept SIGTERM and propagate it to children for graceful termination
+			but a shell like 'sh'/'bash' does neither by default
+				-> since SIGTERM does not make process with PID 1 exit, docker sends SIGKILL instead after 10 seconds,
+				   which explains the long time required for stopping a container if using 'sh'/'bash' as ENTRYPOINT
+- consequence for applications of Inception : be careful on general setup tasks attribution
+	\ dockerfile : installs application ("apt-get"), defines a bash script as ENTRYPOINT
+		-> the docker image contains the application already installed, but not configured
+	\ bash script : configures application, launches its binary, as a FOREGROUND PROCESS, and with PID 1
+
+## III - Inception setup
+
+- in this section, explanation of the specific setup steps taken to set in motion the docker features described above
+- abbreviation : cont_nginx = NGINX container, cont_wp = WordPress/PHP-FPM container, cont_mdb = MariaDB container
+- setup through a combination of files :
+	\ for each component, a dockerfile to build the image -> spares image commands
+	\ for each component except NGINX, a bash script to configure the container when it starts
+	\ one docker-compose file to assemble the components -> spares commands to create docker networks / volumes / secrets
+
+### A. Docker-compose file
+
+- 3 sections for 3 types of docker objects :
+	'services' for containers, 'networks' for communication, 'volumes' for storage
+- by default all containers start simultaneously (list order irrelevant), but here dependency must be cared for :
+	\ soft dependency of cont_nginx on cont_wp :
+		cont_nginx's main process <nginx> can safely run even if PHP-FPM in cont_wp is not ready
+			(PHP requests to NGINX server will simply produce "502 bad gateway")
+		-> in docker-compose file, cont_nginx "depends_on" cont_wp, so docker will start cont_wp first,
+			but not check that PHP-FPM server is listening for incoming messages before starting cont_nginx
+	\ hard dependency of cont_wp on cont_mdb :
+		WordPress configuration in bash config script of cont_wp REQUIRES MariaDB server listening in cont_mdb
+			(because WordPress config commands like `wp user create ...` write in a database)
+		-> in docker-compose file, cont_wp starts only when "healthcheck" on cont_mdb succeeds
+			<=> the "healthcheck" command defined in cont_mdb's dockerfile returns exits status 0 :
+				here the command checks that MariaDB server is listening, using small MariaDB client 'mysqladmin ping'
+	/!\ "healthcheck" command execution is initiated by docker daemon at regular intervals,
+		but command gets executed inside the checked container (here inside cont_mdb), by a non-root user
+
+- to make commumication between containers possible, docker network 'nw_inception' defined
+  with type 'bridge' and all containers as members -> see lines outside docker-compose file where network is used :
+	\ cont_nginx --> cont_wp :
+		~ in NGINX config file, fastCGI forwarding with 'fastcgi_pass wordpress:9000'
+		~ in WordPress config bash script, PHP-FPM listening to port 9000 with line 'sed' on 'www.conf'
+	\ cont_wp --> cont_mdb : 
+		~ in WordPress config bash script, WordPress PHP scripts accessing db with '--dbhost=mariadb:3306'
+		~ in MariaDB config bash script, MariaDB launched by 'mysqld_safe' listening to '--port=3306'
+- to allow persistent+shared storage, definition of 'volumes' with 'bind' mounts
+  = branches of the host filesystem mounted on a branch of the container's filesystem <=> data stored there
+	\ is accessible to the host computer
+	\ is accessible to a different container that (for example, if original container was removed) with the same mount
+  #f : choice of solution to have permission to delete volume content from the host
+
+- additional use of docker "env" and "secrets" features to give containers access to parameters data / confidential data :
+	\ "env_file" directive : indicates an environment file, defining any number of environment variables,
+		that will be set with the given value inside the container
+	\ "secrets" directive : indicates secrets whose values are contained in files on host filesystem,
+		that should be mounted to container filesystem (in '/run/secrets') to be available inside container
+		without ever displaying the secret values in text
+- for Inception, parameters set by environment or docker secrets :
+	\ MariaDB user for healthcheck + its password			-> hardcoded parameter (since it is a dummy user with 0 privileges)
+	\ MariaDB user for WordPress database + its password	-> username in env, password in secrets
+	\ WordPress admin user + its password					-> username in env, password in secrets
+	\ WordPress subsidiary user + its password				-> username in env, password in secrets
+	\ domain name, website base url							-> in env
+
+### B. Dockerfiles
+
+- remember at all point : dockerfile --(build)--> docker image --(run)--> docker container
+- dockerfile = plan to create a docker image, with directives :
+	\ 'FROM base_image:tag' : define a base image from which this image will inherit
+		~ usually base image is not present already on host but pulled (=downloaded) from a docker repository
+		~ here, use of any predefined application image is forbidden for Inception,
+			so the pulled image is the most basic image possible : the OS (here, Debian) running inside our container
+	\ 'ENV name=value' : define environment variables that will exist inside the container
+	\ 'RUN command' : run the given command inside the image,
+		-> usually 'apt-get ...' to install application that will be run in the container, and all its dependencies
+	\ 'COPY path_in_host path_in_container' : copy files from the host filesystem to the container's filesystem
+		-> usually to copy config files, here bash scripts for cont_mdb/cont_wp, and a NGINX config file for cont_nginx
+	\ 'MOUNT path_in_host path_in_container' : mount some parts of the host filesystem to the container's filesystem
+		-> here useless since Inception requires using volumes defines in docker-compose
+	\ 'ENTRYPOINT/CMD' : define commands that a container instantiated from this image will run as it starts
+- when building the image from dockerfile directives, the result of directives is embedded INSIDE the image
+	eg. when installing something with a 'RUN apt-get ...' the installed file are part of the image (image can become heavy)
+  -> pay attention to point to where setup commands are executed for Inception :
+	\ for MariaDB/NGINX/PHP-FPM, program files are installed in image during image build,
+		but for WordPress (in WordPress image), WordPress files are installed by bash config script when container is run,
+			in order to use the WordPress CLI utility 'wp' -> small inefficiency created by download at container startup
+	\ for NGINX TLS protocol setup, RSA key pair created during image build
+		<=> all containers instantiated from this image would have the same public/private key
+			(what would happen in reality : dockerfile COPY directive to copy RSA key files from host computer)
+- by default, all commands in RUN / CMD / ENTRYPOINT are executed as root,
+	so since bash config scripts for cont_mdb and cont_wp are given as ENTRYPOINT,
+	all their commands are also executed as root (but this can be modified with dockerfile directive USER)
+  -> in particular for cont_mdb's bash config script, 'mariadb' commands are executed as container root user,
+		which allows to act as MariaDB root user without entering any password
+	 on the other hand, commands run inside the container but not by the bash config script won't be run by container root user,
+	 	so they won't be able to act as MariaDB user, therefore need to create a MariaDB dummy user for healthcheck command
+
+### C. Configuration files
+
+- (cf II-C) docker launches a container by making it run the command given as ENTRYPOINT in dockerfile, with PID 1,
+	so best practice is to have the main application of the container run as PID 1,
+		ie. <nginx> for cont_nginx, <php-fpm> for cont_wp, <mysqld> for cont_mdb
+- but problem 1, for cont_mdb/cont_wp : when some config actions are required before launching the real application,
+  then the ENTRYPOINT must be a config bash script instead of the application ; precisely for each component :
+	\ cont_mdb :	requires bash config script as ENTRYPOINT, to create databases and MariaDB users,
+					then launch MariaDB server with <mysqld> (with option to make it listen on port 3306 instead of UNIX socket)
+	\ cont_wp : 	requires bash config script as ENTRYPOINT, to install WordPress,
+					make PHP-FPM listen on port 9000 instead of UNIX socket,
+					then launch PHP-FPM server with <php-fpmX.X> (X.X is PHP-FPM version number)
+	\ cont_nginx :	does NOT require a bash config script, but rather a NGINX config file that NGINX will apply at startup
+					so ENTRYPOINT can simply be <nginx> (with option to make it use the custom config file)
+- therefore problem 2, for cont_mdb and cont_wp, if launching <mysqld>/<php-fpmX.X> as any other command in the bash script :
+	the process with PID 1 would be a shell (precisely, <bash> running the script), with the application process as its child,
+	and shell processes DO NOT (by default) propagate received signals to there children
+		so when stopping cont_mdb/cont_wp the SIGTERM sent to the PID 1 shell is not propagated to <mysqld>/<php-fpmX.X> process
+			thus the container does not stop until SIGKILL sent 10 seconds after SIGTERM <=> slow and ungraceful exit
+	-> solution : ensure that <mysqld>/<php-fpmX.X> runs as process PID 1 by using <exec> to launch it at end of bash script :
+		this way the shell does not FORK a child to execute the application program,
+			but directly TRANSFORMS (through a `execve`) into the application program, retaining its PID 1 !
+	(<nginx> not involved in this problem because not launched by a shell but as cont_nginx's ENTRYPOINT,
+		just take care to use classic form with "[]" and not shell form, otherwise docker will use a shell anyway, cf. II-C)
+- related problem 3, for cont_nginx/cont_wp, if retaining the default behavior of <nginx>/<php-fpmX.X> of going in background :
+	the process with PID 1 would be a mere launcher that spawns the real application process as child
+	and then exits immediately before waiting for it to terminate (this is the meaning of 'in background')
+		so that docker would witness the process with PID 1 exiting, and stop the container
+	-> solution : use the command-line options to force foreground execution instead of background :
+	   `nginx -g "daemon off;"` for <nginx>, `php-fpmX.X -F` for <php-fpmX.X>
+	(<mysqld> not involved in this problem because launched in foreground by default)
+- result after resolving problems 1/2/3 :
+	\ <mysqld> launched in cont_mdb's bash script,		by `exec mysqld --port=3306 ...`
+	\ <php-fpmX.X> launched in cont_wp' bash script,	by `exec php-fpmX.X -F`
+	\ <nginx> launched as cont_nginx's ENTRYPOINT,		by `ENTRYPOINT ["nginx","-c","/etc/nginx/c.conf","-g","daemon off;"]`
+
+#f : explain config of NGINX and successive difficulties with fastCGI and WordPress
+	\ put config file in /etc/nginx to avoid dependencies problems
+	\ log directives to see the values of different variables when request is handled
+	\ path resolution with try-files explanation -> difference in serving static/dyn content
+	\ internal wordpress processing : all through 'index.php'
+		+ dissipate confusion : database does NOT store web static content like css, js, images... (stored in filesystem)
+		  it only store user data of the website (comments, results, history...)
+
+## IV - Bonus
+
+- redis cache :
+	\ difference between Redis and classic in-memory storage : distributed (with a Redis server) vs. per-application
+	\ useful for WordPress because avoids to re-query SQL database when they would produce same result as former query
+		(responsibility of website admin to define which database parts are cacheable ?)
+	\ /!\ here caching on server side to serve resources faster, but caching also occurs on client side
+
+- custom website : simply rrclone served through a specific location defined in NGINX config file
+	/!\ exception compared to other bonuses : does not have its own container, since one NGINX server can serve 2 sites
+
+- vsftpd server :
+	\ FTP server giving access to filesystem to a remote FTP client (eg. command `ftp`)
+	\ unlike MariaDB, uses the system users instead of its own set of user,
+		because all filesystem management logic is already implemented in system user
+	\ so create FTP user (with WP user credentials) as system user,
+		make it member of same group that owns WordPress files in volume (will be group 'www-data')
+	\ configure vsftpd to chroot users and accept upload (= ftp writes)
+	\ use `tini` to solve issue of vsftpd not handling SIGTERM
+
+- Adminer (required) + Speedtest (freely chosen) :
+	\ could be served in WordPress as it is just a PHP file, but subject requires container
+	\ in Adminer container and Speedtest container, install PHP-FPM to run PHP scripts just like WordPress
+		(except does not require parameters for connection to database defined in Dockerfile)
+	\ adapt NGINX config file to add location '/adminer'/'/speedtest'
+	\ make NGINX see the files so that it accepts to fastcgi_pass them
+		~ just create an empty '/var/www/html/adminer/index.php' file for Adminer, which is PHP only
+		~ create a volume mounted in both Speedtest and NGINX containers for Speedtest, because it has static files
+			(so like in the case of WordPress, NGINX serves the static files directly)
+
+## V - Execution
+
+### A. Useful for debugging and tests
+
+- useful places in filesystem :
+	\ '/bin', '/usr/bin', '/usr/local/bin' : components of PATH, used to store binaries
+	\ '/var/www/html' :		used to store website files
+	\ '/var/lib/mysql' :	used to store MySQL databases
+	\ '/etc/nginx' :		used to store NGINX configuration and parameters, eg. 'fastcgi_params'
+	\ '/etc/php/[version] :	used to store PHP and PHP-FPM configuration, eg. 'fpm/pool.d/www.conf'
+	\ '/run' :				used to store NGINX runtime files, eg. 'nginx.pid'
+	\ '/run/php' :			used to store PHP-FPM runtime files, eg. 'php7.3-fpm.sock'
+	\ '/var/log/nginx' :	used to store NGINX error logs
+	\ '/var/log' :			used to store PHP-FPM error logs
+- tests - main exercise :
+	\ `docker exec -it <container_name> bash` to get a shell inside a container
+	\ `curl -v -k <url>` to test access to website in command line, bypassing certificates unsafe because self-signed
+	\ `mariadb -h mariadb -P 3306 -u 'wordpress_user' inception_db -p` to test access to WordPress database inside cont_wp
+	\ `docker top <container_name>` to see processes running inside a container, compare with `ps -e` in host / in container
+		(here : cont_nginx should have 2 processes = master + worker, cont_wp 3 = master + 2 pool, cont_mariadb 1)
+	/!\ PID displayed is relative to host process tree, not tree inside container
+		-> PIDs from `docker top` == PIDs from `ps -e` on host
+- tests - bonus :
+	\ custom website : access `https://localhost/rrclone/` to see rrclone
+	\ redis : `redis-cli ping` + `redis-cli monitor` to observe Redis traffic when interacting with WP website
+	\ ftp : in Redis container, connect with `ftp vsftpd`, then commands `cd|ls|pwd|get|put|mkdir` to affect filesystem
+	\ adminer : access `https://localhost/aminer.php/` to see Adminer
+	\ custom service : access `https://localhost/speedtest/` to see Speedtest
+
+- explanations during correction :
+	\ to show virtualization by docker, launch sandbox container with `docker run --rm -it --name gitlab debian:bullseye`
+	\ gradually, show one container working alone (see commands in Makefile), then the composed containers running together
+
+### B. Plan
+
++ notes on UNIX domain sockets
++ more documentation on specific aspects :
+	+ basic knowledge of WordPress
+	+ SQL language and basic commands to manipulate tables in MariaDB
+	+ RSA key exchange, unrolling of TLS securisation, role of certificate
+	+ docker networks, how the hostname inside a container is associated to another container in same network
+	+ what happens when a process stops inside a container + can there be multiple processes running in foreground (yes) ?
++ run containers in isolation (not possible for WordPress container) :
+	+ mariaDB : use another container on the same network to access databases through MariaDB client
+	+ NGINX : use port forwarding option "-p 8080:443" and setup NGINX config file to test access to website through browser
++ setup the 3 services like in the subject, but not in a virtual machine
+	+ experiment docker-compose file and commands, create the network
+	+ why does NGINX need to have a wordpress directory ? -> to serve wordpress static content
+	+ create Makefile with docker-compose commands
++ use docker secrets for passwords, use .env file for usernames and domain name
++ see if possible to adapt ENTRYPOINTS and bash scripts to manage gracefully SIGTERM from docker stop (exec)
++ work on bonuses
+	+ redis cache
+	+ custom static site
+	+ ftp server
+	+ adminer
+	+ additional service : librespeed
+- transfer to the virtual machine
+	+ change port redirection to 443(host):443(NGINX container)
+	+ check ftp bonus working from VM
+	+ change hostname to abedin.42.fr
+	+ set volumes in '/home/abedin/data' of virtual machine
+		(see consequence for deletion of volume on host filesystem -> adduser in dockerfile ?)
+	+ make volume for rrclone website instead of copying files
+	+ check data persistence through volumes
+	\ remove app_params directory before push
+
+- why a virtual machine is needed :
+	\ change hostname to abedin.42.fr
+	\ allow redirection of port 443 to NGINX container
+	\ easily remove files affected by WordPress/MariaDB through bound volumes
+
+
+##########
+
+- NGINX checks files existence before fastCGI (there is a hidden try files in all blocks)
+- WordPress has static files that must be served directly by NGINX
+- Docker zombie reaping problem and use of 'tini'
+- the whole struggle with permissions/groups in wordpress volume, notably ftp upload -> local_umask and g+s
+- instead of deleting images and rebuilding them, remove container and use docker-compose build
+- mariadb setup in case of persistent volume : healthcheck would succeed during bash config script
+	so modify my.cnf conf file temporarily to remove listening on TCP/IP ports
+- configuration of vsftpd : define ports for passive mode, set port forwarding in docker-compose
+- dockerfile context passed to daemon at build time -> not possible to pass files higher in arborescence
+- double use of volumes : persistence and sharing data (make clear in notes)
+
++ wrong rights and ownership when uploading through vsftpd
+	-> actually correct ownership, since fortinbras ftpuser has primary GID 1000 (and only 33 as secondary GID)
++ link to wp-admin is still localhost:8080
+	-> simply due to volumes from precedent iteration (using port 8080) not properly cleaned
+
+I am experimenting Docker with a small exercise. I set up a WordPress website using 3 containers, organized by docker-compose, respectively for a NGINX server, a PHP-FPM backend server executing WordPress' PHP scripts, and a MariaDB server handling WordPress' databases. In the NGINX container, NGINX is executed with a config file such that the server listens for HTTPS requests on port 443, and requests ending with `.php` are redirected to PHP-FPM (through a Docker network). The server's SSL certificate is self-signed. The docker-compose file sets that port 8080 of my host computer leads to port 443 of NGINX container.

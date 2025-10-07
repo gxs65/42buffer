@@ -107,7 +107,12 @@ class Paddle
 		this.speed = speed; // #f
 		this.moving = 0; // -1 for moving up, 0 for unmoving, 1 for moving down
 		this.drawn = 0; // whether the paddle is currently drawn on the canvas
-		console.log(`Initialized Paddle with dimensions ${width},${height} and radius ${this.radius} and angle ${this.angle}`);
+		this.testify();
+	}
+
+	testify()
+	{
+		console.log(`Paddle dim ${this.width},${this.height} pos ${this.position.x},${this.position.y} radius ${this.radius} angle ${this.angle}`);
 	}
  
 	// Returns 1 if the given <y> is between the top and bottom of the paddle
@@ -118,25 +123,53 @@ class Paddle
 		return (0);
 	}
 
-	// check_collision_with_ball(ball)
-	// {
-	// 	let distance; // distance between center of paddle and center of ball
-	// 	let vec_vert = new Vec2(0, -1);
-	// 	let vec_paddle_to_ball; // vector from center of paddle to center of ball
-	// 	let angle; // angle between vector [0, -1] and <vec_paddle_to_ball>
+	check_collision_with_ball(ball)
+	{
+		let distance; // distance between center of paddle and center of ball
+		let vec_vert = new Vec2(0, -1);
+		let vec_paddle_to_ball; // vector from center of paddle to center of ball
+		let angle; // angle between vector [0, -1] and <vec_paddle_to_ball>
 
-	// 	// Initial check : the ball intersects the circle that contains the whole paddle
-	// 	vec_paddle_to_ball = vec2_substract(ball.position, this.position);
-	// 	distance = vec_paddle_to_ball.length;
-	// 	if (distance > this.radius + ball.radius)
-	// 		return (0);
+		this.testify();
+		ball.testify();
 
-	// 	// Determine incidence angle
-	// 	angle = Math.acos(vec2_sproduct(vec_vert, vec_paddle_to_ball) / (vec_vert.length * distance));
-	// 	if 
+		// Initial check : the ball intersects the circle that contains the whole paddle
+		vec_paddle_to_ball = vec2_substract(ball.position, this.position);
+		distance = vec_paddle_to_ball.length;
+		console.log(`[collision ball-paddle] distance between object : ${distance}, compared with paddle radius : ${this.radius}`);
+		if (distance > this.radius + ball.radius)
+			return (0);
 
+		// Determine incidence angle
+		angle = Math.acos(vec2_sproduct(vec_vert, vec_paddle_to_ball) / (vec_vert.length * distance));
+		console.log(`[collision ball-paddle] incidence angle : ${angle}, compared with paddle angle : ${this.angle}`);
+		if (angle < this.angle || angle > Math.PI * 2 - this.angle) // sector : upper side
+		{
+			console.log("[collision ball-paddle] check in sector : upper side");
+			if (ball.position.y >= this.position.y)
+				return (1);
+		}
+		else if (angle < Math.PI - this.angle) // sector : right side
+		{
+			console.log("[collision ball-paddle] check in sector : right side");
+			if (ball.position.x <= this.position.x)
+				return (2);
+		}
+		else if (angle < Math.PI + this.angle) // sector : lower side
+		{
+			console.log("[collision ball-paddle] check in sector : lower side");
+			if (ball.position.y <= this.position.y)
+				return (3);
+		}
+		else // sector : left side
+		{
+			console.log("[collision ball-paddle] check in sector : left side");
+			if (ball.position.x >= this.position.x)
+				return (4);
+		}
+		return (0);
 
-	// }
+	}
 
 	// Moves the paddle if its <moving> property is -1 (up) or 1 (down)
 	// (checks that the paddle does not go beyonf top wall or bottom wall)
@@ -150,9 +183,9 @@ class Paddle
 		ctx.clearRect(this.position.x - this.width / 2,
 					 this.position.y - this.height / 2, this.width, this.height); // erase previous rectangle
 		if (this.moving == -1 && this.position.y - this.speed - this.height / 2 > 0)
-			this.position.y -= this.speed; // moving up
+			this.position.y += this.speed; // moving up
 		else if (this.moving == 1 && this.position.y + this.speed + this.height / 2 < canvas.height)
-			this.position.y += this.speed; // moving down
+			this.position.y -= this.speed; // moving down
 		ctx.fillStyle = paddle_colors[this.index];
 		ctx.fillRect(this.position.x - this.width / 2,
 					this.position.y - this.height / 2, this.width, this.height);
@@ -174,6 +207,12 @@ class Ball
 		this.drawn = 0;
 		this.direction = initial_direction; // normalized direction vector
 		this.direction.normalize();
+		this.testify();
+	}
+
+	testify()
+	{
+		console.log(`Ball dim ${this.radius} pos ${this.position.x},${this.position.y}`);
 	}
 
 	// Puts ball in initial position and sets its direction to a random vector
@@ -251,7 +290,7 @@ class Ball
 			ctx.clearRect(this.position.x - this.radius - 2, this.position.y - this.radius - 2,
 				this.radius * 2 + 4, this.radius * 2 + 4);
 		}
-		if (collision == 0) // if no collision, go to new position : erase and redraw ball
+		if (collision == 0) // if no collision, go to new position : redraw ball
 		{
 			this.position.x = new_pos.x;
 			this.position.y = new_pos.y;
@@ -277,12 +316,17 @@ class Pong_game
 		this.running = 0;
 		this.points_info = document.querySelector("#pointsInfo");
 		this.points = [0, 0];
+		this.play_button = document.querySelector("#play");
+		this.play_button.addEventListener("click", () => {this.launch();});
 		this.stop_button = document.querySelector("#stop");
 		this.stop_button.addEventListener("click", () => {this.running = 0;});
 		this.tick_button = document.querySelector("#tick");
-		this.tick_button.addEventListener("click", () => {this.update_game_state(1)});
+		this.tick_button.addEventListener("click", () => {this.update_by_tick();});
 		this.create_canvas();
 		this.create_event_listeners();
+		this.last_time = 0;
+		this.animation_events = [];
+		this.frame_counter = 0;
 	}
 
 	// Create canvas, and instantiate 2 paddles and 1 ball (not drawn yet)
@@ -309,11 +353,20 @@ class Pong_game
 	// Launch game by calling a first animation update
 	launch()
 	{
-		this.running = 1
-		this.counter = 0;
-		this.last_time = 0;
-		this.animation_events = [];
-		//this.update_game_state(0);
+		this.running = 1;
+		this.update_game_state(0);
+	}
+
+	// Function for ad-hoc tests
+	tests()
+	{
+		console.log(`Game of Pong with state : running ${this.running}`);
+		this.paddles[0].position.x = 50;
+		this.paddles[0].position.y = 50;
+		this.ball.position.x = 40;
+		this.ball.position.y = 50;
+		let res = this.paddles[0].check_collision_with_ball(this.ball);
+		console.log(`Result : ${res}`);
 	}
 
 	// Game mainloop
@@ -346,22 +399,32 @@ class Pong_game
 		
 		key_released = (code.slice(code.length - 1)) == "u";
 		console.log("processing key for player " + player + ", key_rel " + key_released);
-		if (key_released && paddles[player].moving == 0)
+		if (key_released && this.paddles[player].moving == 0)
 			return ;
-		if (!key_released && paddles[player].moving != 0)
+		if (!key_released && this.paddles[player].moving != 0)
 			return ;
 		if (code.slice(0, code.length - 1) == keys_by_player[player][0])
 			key_direction = 1;
 		else
 			key_direction = -1;
 		console.log("direction determined : " + key_direction);
-		if (key_released && paddles[player].moving != key_direction)
+		if (key_released && this.paddles[player].moving != key_direction)
 			return ;
 		console.log("modifying paddles's 'moving' property");
 		if (key_released)
-			paddles[player].moving = 0;
+			this.paddles[player].moving = 0;
 		else
-			paddles[player].moving = key_direction;
+			this.paddles[player].moving = key_direction;
+	}
+
+	// When tick button is clicked, calls <update_game_state> if <running> is 0
+	update_by_tick()
+	{
+		console.log("update by tick");
+		if (this.running == 0)
+		{
+			this.update_game_state(1);
+		}
 	}
 
 	// Prepares a new game frame :
@@ -373,13 +436,14 @@ class Pong_game
 		let delta_time;
 		let ball_advance;
 
-		if (this.running == 0)
-			return ;
+		console.log(`Frame ${this.frame_counter}`);
+		this.frame_counter++;
 		if (this.last_time == 0)
 		{
 			this.last_time = 1;
 			console.log("initial tick");
-			//requestAnimationFrame(() => {this.update_game_state();});
+			if (this.running)
+				requestAnimationFrame(() => {this.update_game_state();});
 			return ;
 		}
 
@@ -405,14 +469,15 @@ class Pong_game
 		this.paddles[0].update();
 		this.paddles[1].update();
 
-		//requestAnimationFrame(() => {this.update_game_state();});
+		if (this.running)
+			requestAnimationFrame(() => {this.update_game_state();});
 	}
 }
 
 function setup()
 {
 	let game = new Pong_game();
-	game.launch();
+	game.tests();
 }
 
 window.onload = setup;

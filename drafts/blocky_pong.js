@@ -64,7 +64,7 @@ function vec2_add(vecA, vecB)
 // Substraction of <vecB> to <vecA>
 function vec2_substract(vecA, vecB)
 {
-	return (vec2_add(vecA, vecB.scale(-1)));
+	return (vec2_add(vecA, vecB.scaled(-1)));
 }
 
 // Scalar product of two vectors
@@ -123,15 +123,69 @@ class Paddle
 		return (0);
 	}
 
+	// Checks if ball collides with the paddle, without taking orientation into account
+	// (ie. this method can't determine with which corner / edge of the paddle it collided)
+	check_collision_with_ball_unoriented(ball)
+	{
+		let abs_ball_pos = new Vec2(0, 0); // position of ball center in an orthonormal basis centered on paddle center
+		let distance_to_corner;
+
+		abs_ball_pos.x = Math.abs(ball.position.x - this.position.x);
+		abs_ball_pos.y = Math.abs(ball.position.y - this.position.y);
+		console.log(`abs ball position : ${abs_ball_pos.x}, ${abs_ball_pos.y}`);
+
+		// Succession of conditions produces the right output
+		// (see https://stackoverflow.com/questions/401847/circle-rectangle-collision-detection-intersection)
+		// Excludes cases
+		if (abs_ball_pos.x > (this.width / 2 + ball.radius))
+			return (0);
+		if (abs_ball_pos.y > (this.height / 2 + ball.radius))
+			return (0);
+		console.log("not excluded");
+		// Includes cases
+		if (abs_ball_pos.x < this.width / 2)
+			return (1);
+		if (abs_ball_pos.y < this.height / 2)
+			return (1);
+		console.log("not included on edges");
+		// Last cases : ball center in the "edge" zone
+		distance_to_corner = Math.pow(abs_ball_pos.x - this.width / 2, 2) + Math.pow(abs_ball_pos.y - this.height / 2, 2);
+		if (distance_to_corner <= Math.pow(ball.radius, 2))
+			return (1);
+		else
+			return (0);
+	}
+
+	// Checks that there is a collision between ball and paddle,
+	// and determine at which edge or corner of the paddle it occurred
+	// Return value is an integer indicating where the collision occurred,
+	// supposing the paddle is the rectangle in the area 4
+	// 0 | 1 | 2	(0 means no collision)
+	// - + - + -	(4 should never happen, it means ball center is inside paddle)
+	// 3 | 4 | 5	(0/2/6/8 means collision with corner, 1/3/5/7 means collision with edge)
+	// - + - + -
+	// 6 | 7 | 8
 	check_collision_with_ball(ball)
 	{
+		let x_zone;
+		let y_zone;
+
+		this.testify();
+		ball.testify();
+
+		if (this.check_collision_with_ball_unoriented(ball) == 0)
+			return (0);
+
+		x_zone = (ball.position.x > this.position.x - this.width / 2) + (ball.position.x > this.position.x + this.width / 2);
+		y_zone = (ball.position.y > this.position.y - this.height / 2) + (ball.position.y > this.position.y + this.height / 2);
+		console.log(`x zone : ${x_zone}, y zone : ${y_zone}`);
+		return (y_zone * 3 + x_zone);
+
+		/*
 		let distance; // distance between center of paddle and center of ball
 		let vec_vert = new Vec2(0, -1);
 		let vec_paddle_to_ball; // vector from center of paddle to center of ball
 		let angle; // angle between vector [0, -1] and <vec_paddle_to_ball>
-
-		this.testify();
-		ball.testify();
 
 		// Initial check : the ball intersects the circle that contains the whole paddle
 		vec_paddle_to_ball = vec2_substract(ball.position, this.position);
@@ -142,32 +196,14 @@ class Paddle
 
 		// Determine incidence angle
 		angle = Math.acos(vec2_sproduct(vec_vert, vec_paddle_to_ball) / (vec_vert.length * distance));
+		console.log(`${ball.position.x}, ${this.position.x}`);
+		if (ball.position.x < this.position.x)
+		{
+			console.log("left of paddle");
+			angle += Math.PI;
+		}
 		console.log(`[collision ball-paddle] incidence angle : ${angle}, compared with paddle angle : ${this.angle}`);
-		if (angle < this.angle || angle > Math.PI * 2 - this.angle) // sector : upper side
-		{
-			console.log("[collision ball-paddle] check in sector : upper side");
-			if (ball.position.y >= this.position.y)
-				return (1);
-		}
-		else if (angle < Math.PI - this.angle) // sector : right side
-		{
-			console.log("[collision ball-paddle] check in sector : right side");
-			if (ball.position.x <= this.position.x)
-				return (2);
-		}
-		else if (angle < Math.PI + this.angle) // sector : lower side
-		{
-			console.log("[collision ball-paddle] check in sector : lower side");
-			if (ball.position.y <= this.position.y)
-				return (3);
-		}
-		else // sector : left side
-		{
-			console.log("[collision ball-paddle] check in sector : left side");
-			if (ball.position.x >= this.position.x)
-				return (4);
-		}
-		return (0);
+		*/
 
 	}
 
@@ -363,8 +399,9 @@ class Pong_game
 		console.log(`Game of Pong with state : running ${this.running}`);
 		this.paddles[0].position.x = 50;
 		this.paddles[0].position.y = 50;
-		this.ball.position.x = 40;
-		this.ball.position.y = 50;
+		this.ball.position.x = 42;
+		this.ball.position.y = 65;
+		this.ball.radius = 8;
 		let res = this.paddles[0].check_collision_with_ball(this.ball);
 		console.log(`Result : ${res}`);
 	}

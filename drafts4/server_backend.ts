@@ -1,5 +1,25 @@
-// Configuration constants
+/////////////
+// IMPORTS //
+/////////////
 
+// 'require' syntax from CommonJS used to import modules
+// (this is the old Node.JS system to import modules,
+//  since then JS has developed another system using keyword 'import')
+const http = require('node:http');
+const fs = require('node:fs');
+const ws = require('ws');
+// Lines asking TS to load types for the modules,
+// disappear in the JS code post transpilation with `tsc`
+import type * as httpt from "node:http";
+import type * as wst from "ws";
+
+///////////
+// UTILS //
+/////////// 
+
+// CONSTANTS
+
+// (TMP, should be replaced by a json file)
 const canvas_width = 300;
 const canvas_height = 150;
 const paddle_margin = 10;
@@ -10,7 +30,7 @@ const paddle_colors = ["rgb(200 0 0)", "rgb(0 0 200)"];
 const ball_radius = 4;
 const ball_initial_speed = 2;
 const ball_acceleration = 0.0001;
-const max_direction_horiz = 5;
+const max_direction_horiz = 5; // maximal vertical slope
 const keys_by_player = [["KeyW", "KeyS"], ["ArrowUp","ArrowDown"]];
 const paddle_normal_vectors =
 				[	[-0.5, -0.5], 	[0, -1], 	[0.5, -0.5],
@@ -18,7 +38,7 @@ const paddle_normal_vectors =
 					[-0.5, 0.5], 	[0, 1], 	[0.5, 0.5]];
 const wall_normal_vectors = {top: [0, 1], bottom: [0, -1]};
 
-// Utility functions
+// UTILITY FUNCTIONS
 
 // Returns the slope of the circular line with radius centered on (0, 0) defined by `y**2 + x**2 == 1`
 // (the simplified expression is : `f(x) = (1 - x**2)**0.5`, therefore derivative is `f'(x) = -x / (1 - x**2)**0.5`)
@@ -28,8 +48,17 @@ function slope_on_circle(abcissa: number): number
 	return (-1 * abcissa / (1 - abcissa * abcissa)**0.5);
 }
 
-// Vector manipulation (class + functions for operations, not operator overload)
+interface ws_identifier
+{
+	socket: wst.WebSocket | null; // Websocket instance
+	ws_key: number; // key identifying the user connected through this websocket
+	game_key: number; // key identifying the game to which this player participates
+	player_index: number; // player index in the game
+}
 
+// VECTOR MANIPULATION (CLASSES + FUNCTIONS)
+
+// 2-dimensional point class
 class Point {
 	x: number;
 	y: number;
@@ -124,8 +153,11 @@ function vec2_symmetry(incident: Vec2, normal: Vec2): Vec2
 	return (vec2_add(incident, normal.scale(vec2_sproduct(incident, normal) * -2)));
 }
 
-// Paddle class
+////////////////
+// GAME LOGIC //
+////////////////
 
+// A rectangular paddle that can be moved by one player and block the ball
 class Paddle
 {
 	game: Pong_game;
@@ -313,8 +345,7 @@ class Paddle
 	}
 }
 
-// Ball class
-
+// A ball that moves and collides walls and paddles until it goes through left or right wall
 class Ball
 {
 	game: Pong_game;
@@ -583,64 +614,37 @@ class Ball
 	}
 }
 
-// Pong Game class
-
+// The pong game holding the instances of <Paddle> and <Ball> and running the game loop
 class Pong_game
 {
-	// Game state
-	running: boolean;
-	points: Array<number>;
+	full: boolean = false; // <true> means that there is no slots for new players anymore
+	terminated: boolean = false; // game definitively stopped
+	paused: boolean = false; // game temporarily stopped
+	player_ws_ids: Array<ws_identifier> = [];
+
+	points: Array<number> = [0, 0];
 	ball: Ball | null = null;
 	paddles: Array<Paddle> = [];
-	animation_events: Array<string> = [];
-	// Canvas graphics
-	last_time: number;
-	frame_counter: number;
-	canvas: HTMLCanvasElement | null = null;
-	ctx: CanvasRenderingContext2D | null | undefined = null;
-	// HTML page elements
-	points_info: HTMLParagraphElement | null = null;
-	play_button: HTMLButtonElement | null = null;
-	stop_button: HTMLButtonElement | null = null;
-	tick_button: HTMLButtonElement | null = null;
 
-	// SETUP
-
-	// Constructor : Game starts NOT running
 	constructor()
 	{
-		this.running = false;
-		this.points = [0, 0];
-		this.extract_HTML_elements();
-		this.prepare_canvas();
-		this.create_event_listeners();
-		this.last_time = -1;
-		this.frame_counter = 0;
-		this.animation_events = [];
+		console.log("New Pong Game object created");
 	}
 
-	// Extract elements from HTML DOM
-	extract_HTML_elements()
+	add_player_websocket(ws_id: ws_identifier)
 	{
-		this.canvas = document.querySelector("#canvas");
-		if (!this.canvas)
-			throw new Error("Invalid Canvas");
-		this.ctx = this.canvas.getContext("2d");
-		if (!this.ctx)
-			throw new Error("Invalid Context");
-		this.points_info = document.querySelector("#pointsInfo");
-		this.play_button = document.querySelector("#play");
-		this.stop_button = document.querySelector("#stop");
-		this.tick_button = document.querySelector("#tick");
-		if (!this.points_info || !this.play_button || !this.stop_button || !this.tick_button)
-			throw new Error("Invalid HTML");
-		this.play_button.addEventListener("click", () => {this.launch();});
-		this.stop_button.addEventListener("click", () => {this.pause()});
-		this.tick_button.addEventListener("click", () => {this.update_by_tick();});
+		if (this.full) // no player may be added if game is already full
+			return ;
+		this.player_ws_ids.push(ws_id);
+		if (this.player_ws_ids.length == 2) // if this is second player in the game, start game in 1s
+		{
+			this.full = true;
+			this.setup_game();
+			setTimeout(() => this.game_mainloop(), 1000);
+		}
 	}
 
-	// Instantiate 2 paddles and 1 ball (not drawn yet)
-	prepare_canvas()
+	setup_game()
 	{
 		this.ball = new Ball(this, canvas_width / 2, canvas_height / 2, ball_radius, ball_initial_speed);
 		this.paddles.push(new Paddle(this, 0, paddle_margin, canvas_height / 2,
@@ -649,72 +653,39 @@ class Pong_game
 			paddle_width, paddle_height, paddle_speed));
 	}
 
-	// Listen to keyboard events for player keys
-	create_event_listeners()
+	// Called by <Pong_server> when the Websocket of a player in the game becomes closed
+	// Returns the index of the websocket of the other player (the "counterpart")
+	end_by_disconnect(disconnected_player_index: number)
 	{
-		document.addEventListener('keydown', (event) => {this.store_key_event(event, false)});
-		document.addEventListener('keyup', (event) => {this.store_key_event(event, true)});
+		let counterpart_index: number = 1 - disconnected_player_index;
+		this.terminated = true;
+		return (this.player_ws_ids[counterpart_index].ws_key);
 	}
 
-	// Launch game by calling a first animation update
-	launch()
+	new_player_input(msg: wst.RawData, player: number)
 	{
-		if (this.running == false)
-		{
-			this.running = true;
-			requestAnimationFrame(this.update_game_state);
-		}
+		;
 	}
 
-	// Pause game (can be restarted by pressing "launch" button)
-	pause()
+	game_mainloop()
 	{
-		if (this.running == true)
-		{
-			this.running = false;
-			this.last_time = -1;
-		}
-	}
+		/*
+		check jeu en pause
+		si oui : parcourir input recent pour trouver reprise
+		si non : parcourir input recent pour deplacer paddles
+			update position de la balle
+			envoyer la nouvelle position des deux paddles et de la balle aux websockets
+			setTimeout du prochaine game_mainloop
+		*/
 
-	// Performs 1 game tick when tick button is clicked (while the game is not running)
-	update_by_tick()
-	{
-		if (!this.running)
-		{
-			console.log("Tick update");
-			this.update_game_state(1);
-		}
-	}
-
-	// GAME MAINLOOP
-
-	// Stores keyboard events (players trying to move their paddle)
-	// to be analyzed when generating next frame
-	store_key_event(event: KeyboardEvent, key_released: boolean)
-	{
-		var code = event.code;
-
-		if (!this.running)
-			return ;
-		if(keys_by_player[0].includes(code) || keys_by_player[1].includes(code))
-		{
-			event.preventDefault();
-			if (key_released)
-				this.animation_events.push(code + "r"); // "r" for "released"
-			else
-				this.animation_events.push(code + "p"); // "p" for "pressed"
-		}
-	}
-
-	// Prepares a new game frame :
-	// 		- sends keyboard events that were received since last frame to be processed by paddle instances
-	// 		- erases all drawings on the canvas
-	// 		- updates ball and paddles
-	// 		- calls itself again with <requestAnimationFrame> (as long as <running> is true)
-	// (Method declaration with the syntax `funcname = (paraname) => {funcbody}`,
-	//  because it seems to be the only way to avoid issues with call by `requestAnimationFrame`)
-	update_game_state = (current_time: DOMHighResTimeStamp) =>
-	{
+		// Prepares a new game frame :
+		// 		- sends keyboard events that were received since last frame to be processed by paddle instances
+		// 		- erases all drawings on the canvas
+		// 		- updates ball and paddles
+		// 		- calls itself again with <requestAnimationFrame> (as long as <running> is true)
+		// (Method declaration with the syntax `funcname = (paraname) => {funcbody}`,
+		//  because it seems to be the only way to avoid issues with call by `requestAnimationFrame`)
+	
 		let delta_time: number;
 		let ball_out_of_bounds: 0 | 1 | 2;
 		let losing_player_index: 0 | 1;
@@ -764,45 +735,210 @@ class Pong_game
 		if (this.running)
 			requestAnimationFrame(this.update_game_state);
 	}
-
-	// OTHER
-
-	// Function for ad-hoc tests
-	tests()
-	{
-		this.paddles[0].position.x = 50;
-		this.paddles[0].position.y = 50;
-		this.paddles[0].compute_side_attributes();
-		this.ball!.position.x = 53;
-		this.ball!.position.y = 52;
-		this.ball!.radius = 8;
-		let res = this.paddles[0].check_collision_with_ball(this.ball!);
-		console.log(`Result of collision test : ${res}`);
-	}
 }
 
-function setup()
+////////////////////////////////
+// SERVER HANDLING WEBSOCKETS //
+////////////////////////////////
+
+class Pong_server
 {
-	let game = new Pong_game();
-	//game.tests();
+	hostname: string;
+	port: number;
+	server: httpt.Server;
+	ws_server: wst.WebSocketServer;
+
+	waiting_game: Pong_game | null = null; // the Pong game currently waiting for additional players
+	games: Map<number, Pong_game> = new Map(); // map containing all ongoing games
+	open_websockets: Map<number, wst.WebSocket> = new Map(); // map containing all currently active websockets
+	created_games: number = 0; // counter used to make unique keys for <games>
+	created_websockets: number = 0; // counter used to make unique keys for <open_websockets>
+
+	constructor(hostname:string, port: number)
+	{
+		this.hostname = hostname;
+		this.port = port;
+		this.server = http.createServer((req: httpt.IncomingMessage, res: httpt.ServerResponse) => this.request_handler(req, res));
+		this.ws_server = new ws.WebSocketServer({server: this.server}); // new WebSocket Server "attached" to general HTTP server
+		this.ws_server.on("connection", (ws: wst.WebSocket) => this.setup_websocket(ws));
+		this.server.listen(port, hostname, () => {console.log(`Node.JS server at http://${hostname}:${port}/`);});
+	}
+
+	// HTTP SERVER FEATURES
+
+	// Handles incoming HTTP request : serves files whem request method is GET
+	async request_handler(req: httpt.IncomingMessage, res: httpt.ServerResponse)
+	{
+		console.log(`Received new request : ${req.method}, ${req.url}`);
+
+		if (!("upgrade" in req.headers && req.headers["upgrade"] == "websocket") && req.method == "GET")
+		{
+			console.log("-> serving site content");
+			switch (req.url)
+			{
+				case "/blocky_pong.js":
+					await this.create_response("./blocky_pong.js", "text/javascript", res);
+					break;
+				case "/blocky_pong.html":
+					await this.create_response("./blocky_pong.html", "text/html", res);
+					break;
+				default:
+				{
+					res.statusCode = 404;
+					res.end("Not Found");
+				}
+			}
+		}
+		else
+		{
+			console.log("-> websocket request, handled by websocket server");
+		}
+	}
+
+	// Prepares an HTTP response containing the content of file at <path> in its body
+	async create_response(path: string, mime_type: string, res: httpt.ServerResponse)
+	{
+		fs.readFile(path, 'utf8', (err: Error, data: string) => {
+			if (err)
+			{
+				console.error(err);
+				res.statusCode = 500;
+				res.end("Internal server error");
+			}
+			else
+			{
+				res.statusCode = 200;
+				res.setHeader("Content-Type", mime_type);
+				res.end(data);
+			}
+		});
+	}
+
+	// WEBSOCKET SERVER FEATURES
+
+	// Function called when a client sends an HTTP request asking for transition to WebSocket protocol
+	// 		(1) since websocket creation means user wants to join a game, creates a new <Pong_game> if needed
+	// 		(2) sets up the new WebSocket by defining what to do when events are received on the WebSocket
+	setup_websocket(ws: wst.WebSocket)
+	{
+		let ws_id: ws_identifier = {socket: null, ws_key: 0, game_key: 0, player_index: 0};
+
+		if (this.open_websockets.size >= 2) // TMP, no more than 2 players at a time for now
+		{
+			ws.close();
+			return ;
+		}
+
+		ws_id.socket = ws;
+		ws_id.ws_key = this.created_websockets;
+		this.created_websockets++;
+		this.open_websockets.set(ws_id.ws_key, ws);
+		console.log(`[WS] New client on ws at key ${ws_id.ws_key}`);
+		if (this.waiting_game == null)
+		{
+			ws_id.player_index = 0;
+			ws_id.game_key = this.created_games;
+			this.waiting_game = new Pong_game();
+			this.waiting_game.add_player_websocket(ws_id);
+			console.log(`[WS] -> created new Pong Game with key ${ws_id.game_key} for client, waiting for other player`);
+		}
+		else
+		{
+			ws_id.player_index = 1;
+			ws_id.game_key = this.created_games;
+			this.created_games++;
+			this.games.set(ws_id.game_key, this.waiting_game);
+			this.waiting_game = null;
+			console.log(`[WS] -> added client to game ${ws_id.game_key}, game will start`);
+		}
+		
+		console.log(`[WS] Full ws_id of new websocket : wskey ${ws_id.ws_key}, gkey ${ws_id.game_key}, pind ${ws_id.player_index}`);
+		ws.on("message", (msg: wst.RawData) => {this.ws_handle_data(msg, ws_id)});
+		ws.on("close", () => {this.ws_handle_conn_closed(ws_id)});
+	}
+
+	ws_handle_data(msg: wst.RawData, ws_id: ws_identifier)
+	{
+		let game: Pong_game | undefined;
+
+        console.log(`[WS] Received data on ws ${ws_id.ws_key} : ${msg.toString()}`);
+		game = this.games.get(ws_id.game_key);
+		if (game === undefined) // TMP (errors)
+			return ;
+		game.new_player_input(msg, ws_id.player_index);
+	}
+
+	ws_handle_conn_closed(ws_id: ws_identifier)
+	{
+		let counterpart_ws_key: number;
+		let counterpart_ws: wst.WebSocket | undefined;
+		let game: Pong_game | undefined;
+
+		console.log(`[WS] Connection closed on ws ${ws_id.ws_key}`);
+		game = this.games.get(ws_id.game_key);
+		if (game === undefined)
+			return ; // TMP (errors)
+		else if (game.terminated)
+		{
+
+		}
+		else
+		{
+			counterpart_ws_key = game.end_by_disconnect(ws_id.player_index);
+			console.log(`[WS] -> Game ${ws_id.game_key} terminated, closing counterpart websocket at ${counterpart_ws_key}`);
+			counterpart_ws = this.open_websockets.get(counterpart_ws_key);
+			if (counterpart_ws === undefined)
+				return ; // TMP (errors)
+			counterpart_ws.close();
+			this.open_websockets.delete(ws_id.ws_key);
+			this.open_websockets.delete(counterpart_ws_key);
+		}
+	}
+
 }
 
-window.onload = setup;
-
-
+let pong_server = new Pong_server('127.0.0.1', 8080);
 
 /*
 
++ souci de double close sur les sockets d'une partie qui se termine -> flag interne a Game pour partie terminee
++ impossible de splice-remove dans la liste des WS / des Games, puisque les index sont en dur dans les ws_id
+	-> plutot utiliser une map avec des keys qu'on peut ajouter/retirer tranquillement
 
-+ tenir compte du temps passe depuis la derniere frame dans update_game_state
-+ transformer la surface des paddles en demi-cercles
-+ creer un petit mecanisme de rectification de la direction de la balle quand elle est trop verticale
-+ teleporter la balle si son centre est a l'interieur d'un paddle
-*/
+- structure du JSON serveur -> client
+```
+{
+	"ball_pos":
+	{
+		"x":number,
+		"y":number
+	},
+	"paddles_pos":
+	[
+		{
+			"x":number,
+			"y":number
+		},
+		{
+			"x":number,
+			"y":number
+		}
+	],
+	"points": [number, number]
+}
+```
 
-/*
-I am experimenting with typescript by creating a small game using an HTML canvas. I define a small <Point> class at the beginning of my typescript program :
+- structure du JSON client -> serveur
+```
+{
+	"up":boolean,
+	"down":boolean,
+	"pause":boolean,
+	"play":boolean,
+	"concede":boolean
+}
+```
 
-Unexpectedly, when I try to run my program in my browser, I get an error "Uncaught SyntaxError: bad class member definition" on the line `x:number`.
-I am very surprised, since I did not find any reference to that error online, and my Point class is exactly the same as in the typescript documentation example.
+- placer les constantes dans un fichier JSON qui sera partage par serveur et client
+
 */

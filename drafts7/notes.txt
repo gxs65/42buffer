@@ -1,0 +1,37 @@
+
+# About JS
+
+- structural typing : two objects sharing the same structure are of the same type, even if not defined that way originally
+	(-> one can be assigned to the other, etc)
+- interfaces are tools used for code clarity only, they disappear at compilation (replaced by complete object structure description)
+	and thus they do not exist at runtime, at runtime there exists no reference to interface / other metadata in objects
+
+# About TS
+
+- only compile-time, including interfaces
+
+# About Node.JS
+
+- what it is and means
+- how imports work, ES and CommonJS
+
+# About WS
+
+- bidirectional maintained communication protocol
+- used stringified objects, define those objects with interfaces, role of discriminated unions
+
+# About project
+
+- explain whole structure of events client-server
+- explain different server message types and the ways to end a game
+- clarifier player/client et gestion du websocket par Websocketserver et ses instances de Pong_game
+- bien distinguer ticks de simulation / ticks de broadcast / frames de browser
+
+/*
+// 'require' syntax from CommonJS used to import modules
+// (this is the old Node.JS system to import modules,
+//  since then JS has developed another system using keyword 'import')
+const http = require('node:http');
+const fs = require('node:fs');
+const ws = require('ws');
+*/

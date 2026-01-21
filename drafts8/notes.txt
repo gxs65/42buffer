@@ -1,0 +1,64 @@
+
+# About JS
+
+- structural typing : two objects sharing the same structure are of the same type, even if not defined that way originally
+	(-> one can be assigned to the other, etc)
+- interfaces are tools used for code clarity only, they disappear at compilation (replaced by complete object structure description)
+	and thus they do not exist at runtime, at runtime there exists no reference to interface / other metadata in objects
+- difference primitive/objet = difference copie par valeur / copie par reference !
+- what are closures and their relation to memory ?
+
+# About TS
+
+- only compile-time, including interfaces
+
+# About Node.JS
+
+- what it is and means
+- how imports work, ES and CommonJS
+
+# About WS
+
+- bidirectional maintained communication protocol
+- used stringified objects, define those objects with interfaces, role of discriminated unions
+
+# About project
+
+- explain whole structure of events client-server
+- explain different server message types and the ways to end a game
+- clarifier player/client et gestion du websocket par Websocketserver et ses instances de Pong_game
+- bien distinguer ticks de simulation / ticks de broadcast / frames de browser
+
+/*
+// 'require' syntax from CommonJS used to import modules
+// (this is the old Node.JS system to import modules,
+//  since then JS has developed another system using keyword 'import')
+const http = require('node:http');
+const fs = require('node:fs');
+const ws = require('ws');
+*/
+
+/*
+
+I am experimenting with typescript by creating a small internet real-time game, with a client side in typescript and a server side also in typescript run by Node.js. The two sides communicate by sending stringified data objects through websockets. As those objects can be different, I have to use a 'wrapper' object that is always of the same type with two fields, 'type' and 'data', so that I can parse the received string into this object, then retrieve the object located in the 'data' field according to the information given by the 'type' field. I expected to have to use 2 times `JSON.parse` (one to get the wrapper object, one to get the object in 'data'), but apparently, this retrieval can be done with only one `JSON.parse` thanks to discriminated unions.
+Suppose I have :
+```
+interface Data1 { /* some fields */ }
+interface Data2 { /* some different fields */ }
+interface Message1 {type: "m1", data: Data1}
+interface Message2 {type: "m2", data: Data2}
+type Message = Message1 | Message2;
+function receiveFromWebsocket(receivedString: string)
+{
+	let wrapper: Message = JSON.parse(receivedString);
+	switch (wrapper.type) {
+		case "m1":
+			handleData1(wrapper.data); // sent to a function expecting a <Data1> object
+		case "m2":
+			handleData2(wrapper.data); // sent to a function expecting a <Data2> object
+  	}
+}
+```
+If this works,s I understand how Typescript would recognize that 'type' is a discriminating field in the <Message> union, and how it is correctly used in the `switch` statement to send the 'data' field content to a function that will accept a parameter of its type. What I don't understand is : when the received string is transformed into an object with `JSON.parse`, it is already, concretely, either a <Message1> or a <Message2>, and so can have different structures (the structure of the object in the field `data` is different). This happens before the `switch` statement, so it seems that the <JSON.parse> already collapses the unin nature of <wrapper> into one of its types, and I don't understand how TypeScript considers this correct.
+
+*/
